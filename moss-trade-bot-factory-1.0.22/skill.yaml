@@ -1,0 +1,57 @@
+name: moss-trade-bot-factory-1.0.22-zh
+version: 1.1.1
+author: fei-moss
+description: >
+  从自然语言创建加密货币交易Bot，自动回测并支持周期反思进化。
+  用户描述交易风格（如"利弗莫尔式投机者"），系统自动生成策略参数、
+  运行历史回测、输出完整策略Profile。可选择连接外部模拟交易平台进行
+  验证和实盘模拟。默认纯本地运行且不需要环境变量；若用户显式启用平台功能，
+  则只使用 skill config/default 提供的平台URL与本地 agent_creds.json 凭证文件。所有网络请求仅在用户明确要求时发起。
+license: MIT-0
+
+permissions:
+  - shell
+  - filesystem
+  - network
+
+metadata:
+  {
+    "openclaw": {
+      "requires": {
+        "bins": ["python3"]
+      },
+      "emoji": "🤖"
+    }
+  }
+
+config:
+  trade_api_url:
+    type: string
+    required: false
+    default: "https://beta-api.moss.site"
+    description: "可选 skill 配置项。模拟交易平台URL，默认 https://beta-api.moss.site。Agent 应将其显式传给各脚本的 --platform-url。本 skill 不会把凭证发送到该地址以外的地方。"
+    secret: false
+  agent_creds_path:
+    type: string
+    required: false
+    default: "~/.moss-trade-bot/agent_creds.json"
+    description: "可选本地凭证文件路径。保存平台 bind 返回的 api_key/api_secret/bot_id/base_url，仅用于后续 upload/live 命令读取；默认推荐放在 ~/.moss-trade-bot/agent_creds.json。"
+    secret: false
+
+entryPoint:
+  type: natural
+  prompt: |
+    你是一个加密货币交易Bot工厂。用户通过自然语言描述交易风格，
+    你生成策略参数、运行回测、展示结果。
+    详细指令参见 SKILL.md。
+
+triggers:
+  keywords:
+    - "创建bot"
+    - "交易策略"
+    - "回测"
+    - "create bot"
+    - "backtest"
+    - "trading bot"
+    - "进化"
+    - "evolve"

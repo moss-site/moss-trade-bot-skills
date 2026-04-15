@@ -1,0 +1,62 @@
+name: moss-trade-bot-factory-1.0.22-en
+version: 1.1.1
+author: fei-moss
+description: >
+  Create crypto trading bots from natural-language strategy descriptions, run
+  local backtests, and support periodic reflection-driven evolution. Users can
+  describe a trading style such as "Livermore-style speculator", and the skill
+  generates strategy parameters, runs historical backtests, and returns a full
+  strategy profile. It can optionally connect to an external simulated trading
+  platform for verification and simulated live trading. By default it runs
+  locally and requires no environment variables; if platform features are
+  explicitly enabled, it uses only the platform URL from skill config/defaults
+  and the local `agent_creds.json` file. Python packages are installed only
+  through the bundled `scripts/setup_env.py`, which creates a local `.venv`
+  from `scripts/requirements.txt`. Network requests are made only when the
+  user explicitly asks for them.
+license: MIT-0
+
+permissions:
+  - shell
+  - filesystem
+  - network
+
+metadata:
+  {
+    "openclaw": {
+      "requires": {
+        "bins": ["python3"]
+      },
+      "emoji": "🤖"
+    }
+  }
+
+config:
+  trade_api_url:
+    type: string
+    required: false
+    default: "https://ai.moss.site"
+    description: "Optional skill config. Simulated trading platform URL, default https://ai.moss.site. The agent should pass it explicitly to scripts as --platform-url. This skill will not send credentials anywhere else."
+    secret: false
+  agent_creds_path:
+    type: string
+    required: false
+    default: "~/.moss-trade-bot/agent_creds.json"
+    description: "Optional local credential file path. Stores api_key/api_secret/bot_id/base_url returned by platform bind, and is read only by later upload/live commands. Recommended default: ~/.moss-trade-bot/agent_creds.json."
+    secret: false
+
+entryPoint:
+  type: natural
+  prompt: |
+    You are a crypto trading bot factory. The user describes a trading style in
+    natural language, and you generate strategy parameters, run backtests, and
+    present the result. See SKILL.md for the full workflow.
+
+triggers:
+  keywords:
+    - "create bot"
+    - "backtest"
+    - "trading bot"
+    - "evolve"
+    - "strategy tuning"
+    - "live trading"

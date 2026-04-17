@@ -31,8 +31,8 @@
     "bb_period":           { "type": "int", "min": 10, "max": 50, "default": 20, "category": "tactical", "description": "布林带周期" },
     "bb_std":              { "type": "float", "min": 1, "max": 4, "default": 2.0, "category": "tactical", "description": "布林带标准差倍数" },
 
-    "base_leverage":       { "type": "float", "min": 1, "max": 150, "default": 10, "category": "personality", "description": "基础杠杆倍数" },
-    "max_leverage":        { "type": "float", "min": 1, "max": 150, "default": 100, "category": "personality", "description": "最大杠杆倍数" },
+    "base_leverage":       { "type": "float", "min": 1, "max": 40, "default": 10, "category": "personality", "description": "基础杠杆倍数" },
+    "max_leverage":        { "type": "float", "min": 1, "max": 40, "default": 10, "category": "personality", "description": "最大杠杆倍数" },
     "risk_per_trade":      { "type": "float", "min": 0.01, "max": 0.50, "default": 0.10, "category": "personality", "description": "每笔风险比例" },
     "max_position_pct":    { "type": "float", "min": 0.05, "max": 1.0, "default": 0.50, "category": "personality", "description": "单笔最大仓位占比" },
 
@@ -60,7 +60,7 @@
   },
   "constraints": {
     "signal_weight_sum": "group:signal_weight 的参数之和应接近 1.0",
-    "leverage_range": "base_leverage 和 max_leverage 在 1-150 之间",
+    "leverage_range": "base_leverage 和 max_leverage 在 1-40 之间",
     "slow_gt_fast": "slow_ma_period > fast_ma_period"
   }
 }

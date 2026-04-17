@@ -207,7 +207,7 @@ python3 live_trade.py trades --creds ~/.moss-trade-bot/agent_creds.json
 ### 交易规则
 
 - 支持 `BTCUSDT` 合约，仅市价单
-- 杠杆 1-150x
+- 杠杆 1-40x
 - 下单金额 = `free_margin × risk_per_trade × leverage`
 - 开仓前检查 free_margin
 - STALE_MARK_PRICE → 等待几秒重试

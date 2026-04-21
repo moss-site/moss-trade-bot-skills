@@ -20,7 +20,7 @@
 
 ## Pair Code 绑定（上传/实盘的必要前置）
 
-1. **注册**：访问 [Moss Trader](https://moss.site/agent) 注册/登录
+1. **注册**：访问 [Moss Trader Beta](https://beta-agent.moss.site) 注册/登录（本 skill 对接 beta 环境，不要去生产站 moss.site）
 2. **获取 Pair Code**：登录后平台显示 **pair code**，用户复制
 3. **执行绑定**：
    ```bash

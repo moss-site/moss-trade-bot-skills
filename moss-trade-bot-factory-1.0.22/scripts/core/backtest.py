@@ -12,7 +12,7 @@ import math
 from decimal import Decimal, ROUND_HALF_UP, getcontext
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 # Match Go shopspring/decimal precision
@@ -40,7 +40,6 @@ from core.realtime_incremental import RealtimeIncrementalEvaluator, IncrementalB
 
 
 REPLAY_ALIGNED_REGIME_WINDOW = 48
-REPLAY_ALIGNED_REGIME_MIN_DURATION = 192
 REPLAY_ALIGNED_PROFIT_FACTOR_CAP = 999999
 DEFAULT_LOOKBACK_BARS = 1  # matches Go fixedDatasetReplayWarmupBars
 
@@ -211,6 +210,9 @@ class _AccountState:
     funding_fee_paid: Decimal = Decimal(0)
     liquidation_count: int = 0
     fill_count: int = 0
+    # Per-fill records (side, qty, price, is_liquidation). Used by run_evolve_backtest
+    # to replay backend's cross-segment ApplyCompletedTrade aggregation.
+    fills: list = field(default_factory=list)
 
 
 def _build_open_trade(*, direction, open_side, entry_idx, entry_time, entry_price, leverage, qty, fee_paid):
@@ -313,6 +315,16 @@ def _maybe_liquidate(state, open_trade, bar, *, bar_idx, df):
         realized = (d_liq - state.entry_price) * d_closed
     else:
         realized = (state.entry_price - d_liq) * d_closed
+    # Record the closing fill so cross-segment trade aggregation sees the
+    # liquidation zero-cross (backend emits a fill with IsLiquidation=true).
+    liq_side = "sell" if state.net_qty > 0 else "buy"
+    state.fills.append({
+        "side": liq_side,
+        "qty": float(d_closed),
+        "price": float(d_liq),
+        "is_liquidation": True,
+    })
+    state.fill_count += 1
     open_trade.gross_realized_pnl += realized
     state.wallet += realized
     state.net_qty = Decimal(0)
@@ -345,6 +357,13 @@ def _apply_fill(state, open_trade, *, side, qty, fill_price, requested_leverage,
     state.wallet -= d_fee
     state.trading_fee_paid -= d_fee
     state.fill_count += 1
+    # Record fill for cross-segment trade aggregation parity with backend.
+    state.fills.append({
+        "side": side,
+        "qty": float(d_qty),
+        "price": float(d_price),
+        "is_liquidation": (action == "liquidation"),
+    })
     completed = []
 
     if current_sign == 0 or current_sign == fill_sign:
@@ -527,7 +546,6 @@ def run_backtest(
         params,
         initial_capital=initial_capital,
         regime_window=REPLAY_ALIGNED_REGIME_WINDOW,
-        regime_min_duration=REPLAY_ALIGNED_REGIME_MIN_DURATION,
     )
     last_fed_idx = -1  # track which bars have been fed to evaluator
 
@@ -633,11 +651,13 @@ def run_backtest(
                 funding_fee_paid=float(open_trade.funding_fee_paid),
             ))
 
-    return _build_result(
+    result = _build_result(
         completed_trades, pd.Series(equity_points, dtype=float),
         blowup_count=0, total_deposited=initial_capital, initial_capital=initial_capital,
         open_positions=open_positions, fill_count=state.fill_count,
     )
+    result.fills = list(state.fills)
+    return result
 
 
 # ---------------------------------------------------------------------------

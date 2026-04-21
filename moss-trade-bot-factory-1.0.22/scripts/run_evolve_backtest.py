@@ -26,7 +26,7 @@ import pandas as pd
 import numpy as np
 from core.decision import DecisionParams, compute_signals
 from core.regime import classify_regime
-from core.backtest import run_backtest
+from core.backtest import run_backtest, _build_result
 from core.indicators import atr as compute_atr
 
 
@@ -49,6 +49,140 @@ TACTICAL_FLOAT_FIELDS = [
 ]
 
 MAX_DRIFT_PCT = 0.30
+
+
+def _aggregate_trades_backend_style(fills: list) -> dict:
+    """Replay backend's AggregateRealtimeSourceTradeAggFromFillRows on merged fills.
+
+    Uses Decimal throughout to match backend's shopspring/decimal precision and
+    avoid spurious zero-crossings from float residuals.
+
+    Backend tracks a single `positions` map across all segments' fills, so the
+    trade count / gross profit / gross loss / win rate / profit factor reflect
+    cross-segment phantom open-close crossings as well as intra-segment ones.
+    This mirrors internal/repository/agent_trader.go:949.
+    """
+    from decimal import Decimal as D
+    ZERO = D(0)
+    # Python fills are float-derived from simulate_replay_baseline_fill; tiny
+    # rounding drift (O(1e-16)) can turn an intended exact-close into over-flip
+    # under strict Decimal equality, producing phantom trades + residual dust
+    # that cascades across subsequent fills. Align with _apply_fill's 1e-12
+    # tolerance and zero out sub-tolerance residuals so the aggregator treats
+    # the same fills as _apply_fill does.
+    TOL = D("1e-10")
+    net_qty = ZERO
+    entry_price = ZERO
+    open_side = ""
+    accum_realized = ZERO
+    total_trades = 0
+    wins = 0
+    long_total = 0
+    short_total = 0
+    long_wins = 0
+    short_wins = 0
+    gross_profit = ZERO
+    gross_loss = ZERO
+
+    def apply_completed_trade(side: str, realized):
+        nonlocal total_trades, wins, long_total, short_total, long_wins, short_wins, gross_profit, gross_loss
+        total_trades += 1
+        if side == "buy":
+            long_total += 1
+            if realized > ZERO:
+                long_wins += 1
+        elif side == "sell":
+            short_total += 1
+            if realized > ZERO:
+                short_wins += 1
+        if realized > ZERO:
+            wins += 1
+            gross_profit = gross_profit + realized
+        elif realized < ZERO:
+            gross_loss = gross_loss + (-realized)
+
+    for fill in fills:
+        side = fill["side"]
+        qty = D(str(fill["qty"]))
+        price = D(str(fill["price"]))
+        trade_sign = 1 if side == "buy" else -1
+        trade_signed_qty = D(trade_sign) * qty
+        current_sign = 1 if net_qty > ZERO else (-1 if net_qty < ZERO else 0)
+        prev_open_side = open_side
+
+        if current_sign == 0 or current_sign == trade_sign:
+            old_abs = abs(net_qty)
+            total_abs = old_abs + qty
+            if old_abs <= ZERO:
+                entry_price = price
+            elif total_abs > ZERO:
+                entry_price = (entry_price * old_abs + price * qty) / total_abs
+            net_qty = net_qty + trade_signed_qty
+            realized = ZERO
+        elif abs(net_qty) > qty + TOL:
+            if net_qty > ZERO:
+                realized = (price - entry_price) * qty
+            else:
+                realized = (entry_price - price) * qty
+            net_qty = net_qty + trade_signed_qty
+        elif abs(abs(net_qty) - qty) <= TOL:
+            if net_qty > ZERO:
+                realized = (price - entry_price) * qty
+            else:
+                realized = (entry_price - price) * qty
+            net_qty = ZERO
+            entry_price = ZERO
+        else:
+            closed_qty = abs(net_qty)
+            if net_qty > ZERO:
+                realized = (price - entry_price) * closed_qty
+            else:
+                realized = (entry_price - price) * closed_qty
+            remainder = qty - closed_qty
+            net_qty = D(trade_sign) * remainder
+            entry_price = price
+
+        if abs(net_qty) <= TOL:
+            net_qty = ZERO
+            entry_price = ZERO
+        next_sign = 1 if net_qty > ZERO else (-1 if net_qty < ZERO else 0)
+
+        if current_sign == 0:
+            if next_sign != 0:
+                open_side = side
+                accum_realized = ZERO
+        elif next_sign == 0:
+            accum_realized = accum_realized + realized
+            apply_completed_trade(prev_open_side, accum_realized)
+            open_side = ""
+            accum_realized = ZERO
+        elif current_sign != next_sign:
+            accum_realized = accum_realized + realized
+            apply_completed_trade(prev_open_side, accum_realized)
+            open_side = side
+            accum_realized = ZERO
+        else:
+            accum_realized = accum_realized + realized
+
+    if gross_loss == ZERO and gross_profit > ZERO:
+        profit_factor = 999999.0
+    elif gross_loss == ZERO:
+        profit_factor = 0.0
+    else:
+        profit_factor = float(gross_profit / gross_loss)
+    win_rate = wins / total_trades if total_trades > 0 else 0.0
+
+    return {
+        "total_trades": total_trades,
+        "win_rate": win_rate,
+        "profit_factor": profit_factor,
+        "gross_profit": float(gross_profit),
+        "gross_loss": float(gross_loss),
+        "long_total": long_total,
+        "short_total": short_total,
+        "long_wins": long_wins,
+        "short_wins": short_wins,
+    }
 
 
 def resolve_params_dict(raw_params: Optional[dict]) -> dict:
@@ -104,7 +238,6 @@ def main():
     parser.add_argument("--segment-bars", type=int, default=672, help="Bars per segment (672=7d@15m)")
     parser.add_argument("--capital", type=float, default=10000.0)
     parser.add_argument("--regime-version", default="v1")
-    parser.add_argument("--regime-min-duration", type=int, default=192)
     parser.add_argument("--evolution-file", default=None,
                         help="JSON file with per-segment params [{round, params}, ...]")
     parser.add_argument("--output", default=None)
@@ -126,7 +259,7 @@ def main():
             evolution_schedule = json.load(f)
 
     df = pd.read_csv(args.data, parse_dates=["timestamp"])
-    regime = classify_regime(df, version=args.regime_version, min_duration=args.regime_min_duration)
+    regime = classify_regime(df, version=args.regime_version)
 
     total_bars = len(df)
     n_segments = max(1, total_bars // args.segment_bars)
@@ -134,74 +267,104 @@ def main():
 
     current_params = copy.deepcopy(initial_params)
     evolution_log = []
-    all_signals = pd.Series(0, index=df.index, dtype=int)
 
-    # Pre-compute signals for all segments (with lookback)
-    for seg_idx in range(n_segments):
-        seg_start = seg_idx * args.segment_bars
-        seg_end = min((seg_idx + 1) * args.segment_bars, total_bars)
-        if seg_end <= seg_start:
-            break
-
-        if evolution_schedule and seg_idx < len(evolution_schedule):
-            evo_params = evolution_schedule[seg_idx].get("params", current_params)
-            evo_params = lock_personality(evo_params, initial_params)
-            evo_params = clamp_tactical_drift(evo_params, initial_params)
-            current_params = resolve_params_dict(evo_params)
-
-        lookback = min(200, seg_start)
-        calc_start = seg_start - lookback
-        calc_df = df.iloc[calc_start:seg_end].reset_index(drop=True)
-        calc_regime = regime.iloc[calc_start:seg_end].reset_index(drop=True)
-
-        params_obj = DecisionParams.from_dict(current_params)
-        signals = compute_signals(calc_df, params_obj, calc_regime)
-
-        for j in range(lookback, len(signals)):
-            global_idx = seg_start + (j - lookback)
-            if global_idx < total_bars:
-                all_signals.iloc[global_idx] = signals.iloc[j]
-
-    # Run full backtest with stitched signals (continuous capital)
-    final_params_obj = DecisionParams.from_dict(current_params)
-    full_result = run_backtest(df, final_params_obj, regime,
-                               initial_capital=args.capital,
-                               precomputed_signals=all_signals)
-
-    # Compute per-segment stats from the full result trades
-    seg_boundaries = []
-    for seg_idx in range(n_segments):
-        seg_start = seg_idx * args.segment_bars
-        seg_end = min((seg_idx + 1) * args.segment_bars, total_bars)
-        if seg_end <= seg_start:
-            break
-        seg_start_time = _to_rfc3339(df["timestamp"].iloc[seg_start]) if has_ts else f"bar_{seg_start}"
-        seg_end_time = _to_rfc3339(df["timestamp"].iloc[seg_end - 1]) if has_ts else f"bar_{seg_end}"
-        seg_boundaries.append((seg_idx, seg_start, seg_end, seg_start_time, seg_end_time))
-
-    equity = full_result.equity_curve
-    cumulative_return = 0.0
-    peak_return = 0.0
-
+    # Resolve per-segment params (applying evolution_schedule) and boundaries
+    seg_boundaries = []  # (seg_idx, seg_start, seg_end, seg_start_time, seg_end_time, seg_params)
     current_params_track = copy.deepcopy(initial_params)
-    for seg_idx, seg_start, seg_end, seg_start_time, seg_end_time in seg_boundaries:
+    for seg_idx in range(n_segments):
+        seg_start = seg_idx * args.segment_bars
+        seg_end = min((seg_idx + 1) * args.segment_bars, total_bars)
+        if seg_end <= seg_start:
+            break
         if evolution_schedule and seg_idx < len(evolution_schedule):
             evo_params = evolution_schedule[seg_idx].get("params", current_params_track)
             evo_params = lock_personality(evo_params, initial_params)
             evo_params = clamp_tactical_drift(evo_params, initial_params)
             current_params_track = resolve_params_dict(evo_params)
+        seg_params = copy.deepcopy(current_params_track)
+        # seg0 start skips CSV first bar (backend clamps to scoredStart = iloc[0] + step anyway).
+        start_iloc = seg_start if seg_start > 0 else 1
+        seg_start_time = _to_rfc3339(df["timestamp"].iloc[start_iloc]) if has_ts else f"bar_{seg_start}"
+        seg_end_time = _to_rfc3339(df["timestamp"].iloc[seg_end - 1]) if has_ts else f"bar_{seg_end}"
+        seg_boundaries.append((seg_idx, seg_start, seg_end, seg_start_time, seg_end_time, seg_params))
 
-        eq_start = equity.iloc[seg_start] if seg_start < len(equity) else args.capital
-        eq_end = equity.iloc[min(seg_end, len(equity) - 1)]
-        seg_return = (eq_end - eq_start) / max(eq_start, 1) if eq_start > 0 else 0
+    # Per-segment INDEPENDENT backtests with fresh $capital — matches backend verify
+    # replay: each segment runs ReplaySeedWindowInMemory with StartingEquityInitial.
+    # Cap warmup to 1200 bars to match backend seed.LookbackBars default: backend's
+    # stepper.Reset feeds ReplayBars(evaluationAt, 1200) on the first tick, so each
+    # segment's evaluator sees at most 1200 prior bars, not the full dataset history.
+    SEGMENT_WARMUP_BARS = 1200
+    seg_results = []
+    for seg_idx, seg_start, seg_end, seg_start_time, seg_end_time, seg_params in seg_boundaries:
+        seg_params_obj = DecisionParams.from_dict(seg_params)
+        window_start = pd.Timestamp(seg_start_time)
+        window_end = pd.Timestamp(seg_end_time)
+        warmup_start = max(0, seg_start - SEGMENT_WARMUP_BARS)
+        # Slice df to [warmup_start : seg_end] so the evaluator inside run_backtest
+        # can only feed at most SEGMENT_WARMUP_BARS before the segment window.
+        seg_df = df.iloc[warmup_start:seg_end].reset_index(drop=True)
+        seg_res = run_backtest(
+            seg_df, seg_params_obj, regime,
+            initial_capital=args.capital,
+            window_start=window_start,
+            window_end=window_end,
+        )
+        seg_results.append(seg_res)
 
-        seg_trades = [t for t in full_result.trades
-                      if t.entry_idx >= seg_start and t.entry_idx < seg_end]
-        seg_wins = [t for t in seg_trades if t.pnl > 0]
-        seg_losses = [t for t in seg_trades if t.pnl <= 0]
+    # Merge segment artifacts (mimics backend MergeFrom + CollectMetric).
+    # Backend merged equity curve = [account.InitialEquity] + concat(segment snapshots)
+    #                             + finalState (only if differs from last snapshot).
+    # Python segment equity_curve starts with [initial_capital] + per-bar pre/post snapshots;
+    # drop duplicate $initial prefix from segments 1..N so we have one $10k at the very start.
+    merged_trades = []
+    merged_equity_values = [args.capital]
+    for r in seg_results:
+        merged_trades.extend(r.trades)
+        seg_eq = list(r.equity_curve)
+        # run_backtest always prepends initial_capital; skip it to avoid duplicate resets.
+        if seg_eq and abs(seg_eq[0] - args.capital) < 1e-9:
+            seg_eq = seg_eq[1:]
+        merged_equity_values.extend(seg_eq)
+    merged_equity_series = pd.Series(merged_equity_values, dtype=float)
+
+    full_result = _build_result(
+        merged_trades, merged_equity_series,
+        blowup_count=sum(getattr(r, "blowup_count", 0) for r in seg_results),
+        total_deposited=args.capital,
+        initial_capital=args.capital,
+        open_positions=None,
+        fill_count=sum(getattr(r, "fill_count", 0) for r in seg_results),
+    )
+    # Backend computes trade-level stats via AggregateRealtimeSourceTradeAggFromFillRows
+    # over MERGED fills with a single shared `positions` map. Replay that here on our
+    # per-segment fills so total_trades / profit_factor / win_rate line up.
+    merged_fills = []
+    for r in seg_results:
+        merged_fills.extend(getattr(r, "fills", []))
+    backend_agg = _aggregate_trades_backend_style(merged_fills)
+    full_result.total_trades = backend_agg["total_trades"]
+    full_result.win_rate = backend_agg["win_rate"]
+    full_result.profit_factor = backend_agg["profit_factor"]
+    full_result.long_trade_count = backend_agg["long_total"]
+    full_result.short_trade_count = backend_agg["short_total"]
+
+    # Build per-segment evolution_log entries from each segment's own result.
+    cumulative_return = 0.0
+    peak_return = 0.0
+    current_params_track = copy.deepcopy(initial_params)
+    for (seg_idx, seg_start, seg_end, seg_start_time, seg_end_time, seg_params), seg_res in zip(
+        seg_boundaries, seg_results
+    ):
+        current_params_track = seg_params
+
+        seg_return = seg_res.total_return
+        seg_trades = list(seg_res.trades)
+        seg_wins = [t for t in seg_trades if t.gross_pnl > 0]
+        seg_losses = [t for t in seg_trades if t.gross_pnl <= 0]
         seg_wr = len(seg_wins) / len(seg_trades) if seg_trades else 0
 
-        cumulative_return = (eq_end - args.capital) / args.capital
+        # Cumulative view keyed off the merged (independent-segment) run.
+        cumulative_return = (cumulative_return + 1.0) * (seg_return + 1.0) - 1.0
 
         exit_reasons = {}
         for t in seg_trades:
@@ -231,9 +394,11 @@ def main():
         peak_return = max(cumulative_return, peak_return) if seg_idx > 0 else cumulative_return
         drawdown_from_peak = peak_return - cumulative_return
 
-        all_trades_so_far = [t for t in full_result.trades if t.entry_idx < seg_end]
-        cum_wins = sum(1 for t in all_trades_so_far if t.pnl > 0)
-        cum_total = len(all_trades_so_far)
+        # Cumulative across segments processed so far (segment trades re-index per segment
+        # since each runs independently; aggregate by summing each segment's trades).
+        cum_wins = sum(sum(1 for t in seg_results[k].trades if t.gross_pnl > 0)
+                       for k in range(seg_idx + 1))
+        cum_total = sum(len(seg_results[k].trades) for k in range(seg_idx + 1))
         cum_wr = cum_wins / cum_total * 100 if cum_total else 0
 
         recent_seg_returns = [e["segment_result"]["total_return"] for e in evolution_log[-3:]] if evolution_log else []

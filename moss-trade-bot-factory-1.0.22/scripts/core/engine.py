@@ -73,6 +73,9 @@ class BacktestResult:
     avg_holding_bars: float = 0.0
     avg_holding_hours: float = 0.0
     open_positions: list[Trade] = field(default_factory=list)
+    # Individual fills: list of dicts with {side, qty, price, is_liquidation}.
+    # Populated by run_backtest for evolve-merge aggregation parity with backend.
+    fills: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {

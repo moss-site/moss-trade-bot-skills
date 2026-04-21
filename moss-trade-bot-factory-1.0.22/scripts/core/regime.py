@@ -26,7 +26,6 @@ def classify_regime(
     df: pd.DataFrame,
     version: str = "v1",
     window: int = 48,
-    min_duration: int = 0,
 ) -> pd.Series:
     """
     对每根K线标记其所处的行情regime。
@@ -35,51 +34,18 @@ def classify_regime(
         df: OHLCV DataFrame
         version: 检测器版本 (v1/v2/v3)
         window: 评估窗口大小
-        min_duration: 最小regime持续K线数（0=不平滑）
 
     Returns:
         Series of regime labels (BULL/BEAR/SIDEWAYS)
     """
     if version == "v1":
-        raw = _classify_v1(df, window)
+        return _classify_v1(df, window)
     elif version == "v2":
-        raw = _classify_v2(df, window)
+        return _classify_v2(df, window)
     elif version == "v3":
-        raw = _classify_v3(df, window)
+        return _classify_v3(df, window)
     else:
-        raw = _classify_v1(df, window)
-
-    if min_duration > 0:
-        return _smooth_regime(raw, min_duration)
-    return raw
-
-
-def _smooth_regime(regime: pd.Series, min_duration: int) -> pd.Series:
-    """Regime 平滑：新 regime 必须持续 min_duration 根K线才正式切换。"""
-    smoothed = regime.copy()
-    current = regime.iloc[0]
-    pending = None
-    pending_count = 0
-
-    for i in range(1, len(regime)):
-        raw = regime.iloc[i]
-        if raw == current:
-            pending = None
-            pending_count = 0
-            smoothed.iloc[i] = current
-        elif raw == pending:
-            pending_count += 1
-            if pending_count >= min_duration:
-                current = pending
-                pending = None
-                pending_count = 0
-            smoothed.iloc[i] = current
-        else:
-            pending = raw
-            pending_count = 1
-            smoothed.iloc[i] = current
-
-    return smoothed
+        return _classify_v1(df, window)
 
 
 def _classify_v1(df: pd.DataFrame, window: int = 48) -> pd.Series:

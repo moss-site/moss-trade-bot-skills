@@ -419,14 +419,11 @@ class IncrementalIndicatorState:
 
 
 class IncrementalRegimeState:
-    def __init__(self, window: int, min_duration: int) -> None:
+    def __init__(self, window: int) -> None:
         self.window = window
-        self.min_duration = min_duration
         self.ema50_history = RollingHistory(window + 1)
         self.close_history = RollingHistory(window + 1)
         self.current = REGIME_SIDEWAYS
-        self.pending = ""
-        self.pending_count = 0
         self.index = 0
 
     def push(self, close_px: float, ema50: float, adx: float) -> str:
@@ -450,25 +447,7 @@ class IncrementalRegimeState:
             elif abs(ret) > 0.05:
                 raw = REGIME_BULL if ret > 0 else REGIME_BEAR
 
-        if self.index == 0 or self.min_duration <= 1:
-            self.current = raw
-            self.index += 1
-            return self.current
-        if raw == self.current:
-            self.pending = ""
-            self.pending_count = 0
-            self.index += 1
-            return self.current
-        if raw == self.pending:
-            self.pending_count += 1
-            if self.pending_count >= self.min_duration:
-                self.current = self.pending
-                self.pending = ""
-                self.pending_count = 0
-            self.index += 1
-            return self.current
-        self.pending = raw
-        self.pending_count = 1
+        self.current = raw
         self.index += 1
         return self.current
 
@@ -672,7 +651,6 @@ class RealtimeIncrementalEvaluator:
         initial_capital: float,
         maintenance_rate: float = DEFAULT_MAINTENANCE_RATE,
         regime_window: int = 48,
-        regime_min_duration: int = 192,
     ) -> None:
         self.params = DecisionParams.from_dict(params.to_dict())
         self.params.normalize_weights()
@@ -691,7 +669,7 @@ class RealtimeIncrementalEvaluator:
             _max_int(self.params.fast_ma_period, 7),
             self.params.supertrend_mult,
         )
-        self.regime = IncrementalRegimeState(regime_window, regime_min_duration)
+        self.regime = IncrementalRegimeState(regime_window)
         self.strategy = IncrementalStrategyState(self.initial_capital, self.maintenance_rate)
         self.last_signal = 0
         self.last_composite = 0.0

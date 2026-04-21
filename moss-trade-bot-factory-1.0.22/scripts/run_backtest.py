@@ -26,7 +26,6 @@ def main():
     parser.add_argument("--params-file", default=None, help="Path to params JSON file")
     parser.add_argument("--capital", type=float, default=10000.0)
     parser.add_argument("--regime-version", default="v1")
-    parser.add_argument("--regime-min-duration", type=int, default=192)
     parser.add_argument("--output", default=None, help="Output result JSON path")
     args = parser.parse_args()
 
@@ -40,7 +39,7 @@ def main():
         sys.exit(1)
 
     df = pd.read_csv(args.data, parse_dates=["timestamp"])
-    regime = classify_regime(df, version=args.regime_version, min_duration=args.regime_min_duration)
+    regime = classify_regime(df, version=args.regime_version)
     params = DecisionParams.from_dict(params_dict)
     result = run_backtest(df, params, regime, initial_capital=args.capital)
 

@@ -60,7 +60,7 @@ def _to_float(value, default: float = 0.0) -> float:
 
 def compute_current_signal(df: pd.DataFrame, params: DecisionParams) -> int:
     """Compute signal for the latest bar using full history for indicator warmup."""
-    regime = classify_regime(df, version="v1", min_duration=0)
+    regime = classify_regime(df, version="v1")
     signals = compute_signals(df, params, regime)
     return int(signals.iloc[-1])
 

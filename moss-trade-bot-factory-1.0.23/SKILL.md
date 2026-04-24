@@ -176,7 +176,7 @@ C) 调整参数重跑
 - **当 skill 自己做出开仓 / 平仓决策时，必须由你这个 LLM 现写 `reasoning`**，再通过 `live_trade.py ... --reasoning "<自然语言说明>"` 或等价上报接口透传给后端
 - `reasoning` 必须是**基于当次上下文生成的自然语言**，至少覆盖：方向/动作、触发依据（信号/价格行为/regime/仓位变化中至少两项）、风险或退出原因；不要用“突破阻力，顺势开多”这类预制短句反复套用
 - 推荐长度：中文 2-4 句或 60-180 字；优先贴近用户语言；避免 JSON、标签堆砌、机械字段拼接
-- 若当前执行路径只是启动 `live_runner.py` 这种纯 Python 循环器，则不要假装它能靠 prompt 自动生成 reasoning；需要高质量 reasoning 时，应由 skill 自己逐轮决策并调用下单命令
+- `live_runner.py` 自动开仓 / 平仓时必须把运行时生成的 `reasoning` 一起上报；需要更高质量 LLM 风格说明时，应由 skill 自己逐轮决策并调用 `live_trade.py ... --reasoning ...`
 - 其余平台地址、凭证路径、bot_id、命令参数统一以 `platform_ops.md` 为准，不在此重复展开
 
 ---

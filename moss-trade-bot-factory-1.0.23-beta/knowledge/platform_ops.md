@@ -215,9 +215,9 @@ python3 live_trade.py trades --creds ~/.moss-trade-bot/agent_creds.json
 - 开仓前检查 free_margin
 - STALE_MARK_PRICE → 等待几秒重试
 - 用 `client_order_id` 保证幂等（格式：`{bot_name}-{timestamp}`）
-- `open-long` / `open-short` / `close` 均支持可选 `--reasoning`；该字段应由 skill / LLM 基于当次决策上下文现写，而不是固定模板
+- `open-long` / `open-short` / `close` 均支持可选 `--reasoning`；该字段应基于当次决策上下文生成，而不是固定模板
 - `orders` / `trades` 查询结果会返回 `reasoning`（若该笔订单有上报）；跟单只读视角不会暴露该字段
-- `live_runner.py` 是纯 Python 执行器，不应伪装成 LLM 写说明；若用户要求每次上报都带高质量自然语言 `reasoning`，应由 skill 自己完成决策并调用 `live_trade.py ... --reasoning ...`
+- `live_runner.py` 自动开仓 / 平仓时会随订单上报一段运行时 `reasoning`；若用户要求更高质量 LLM 风格说明，应由 skill 自己完成逐轮决策并调用 `live_trade.py ... --reasoning ...`
 
 ### 安全护栏
 

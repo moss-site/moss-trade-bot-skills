@@ -173,10 +173,10 @@ C) 调整参数重跑
 - **create-bot 和 live_runner 的 `--symbol` 使用 `BTC/USDT`**
 - 实盘信号默认使用 Hyperliquid K 线（`--data-source hyperliquid`），与平台后端价格源一致
 - 自动模式只有在用户明确说”启动自动交易”后进入；手动模式仍然逐笔确认
-- **当 skill 自己做出开仓 / 平仓决策时，必须由你这个 LLM 现写 `reasoning`**，再通过 `live_trade.py ... --reasoning "<自然语言说明>"` 或等价上报接口透传给后端
-- `reasoning` 必须是**基于当次上下文生成的自然语言**，至少覆盖：方向/动作、触发依据（信号/价格行为/regime/仓位变化中至少两项）、风险或退出原因；不要用“突破阻力，顺势开多”这类预制短句反复套用
-- 推荐长度：中文 2-4 句或 60-180 字；优先贴近用户语言；避免 JSON、标签堆砌、机械字段拼接
-- `live_runner.py` 自动开仓 / 平仓时必须把运行时生成的 `reasoning` 一起上报；需要更高质量 LLM 风格说明时，应由 skill 自己逐轮决策并调用 `live_trade.py ... --reasoning ...`
+- **当 skill 自己做出开仓 / 平仓决策时，必须同时生成中文和英文 `reasoning_i18n`**，再通过 `live_trade.py ... --reasoning-zh ... --reasoning-en ...` 或等价上报接口透传给后端；兼容字段 `reasoning` 使用中文版本
+- `reasoning_i18n.zh/en` 必须是**基于当次上下文生成的自然语言**，至少覆盖：方向/动作、触发依据（信号/价格行为/regime/仓位变化中至少两项）、风险或退出原因；不要用“突破阻力，顺势开多”这类预制短句反复套用，也不要把中文原样复制到英文
+- 推荐长度：中文 2-4 句或 60-180 字，英文 2-4 句；避免 JSON、标签堆砌、机械字段拼接
+- `live_runner.py` 自动开仓 / 平仓时必须把运行时生成的 `reasoning` + `reasoning_i18n` 一起上报；需要更高质量 LLM 风格说明时，应由 skill 自己逐轮决策并调用 `live_trade.py ... --reasoning-zh ... --reasoning-en ...`
 - 其余平台地址、凭证路径、bot_id、命令参数统一以 `platform_ops.md` 为准，不在此重复展开
 
 ---

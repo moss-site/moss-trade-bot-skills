@@ -145,6 +145,12 @@ class TradingClient:
         return str(reasoning or "").strip()
 
     @staticmethod
+    def _normalize_reasoning_i18n(reasoning_i18n: dict = None) -> dict:
+        if not reasoning_i18n:
+            return {}
+        return validate_bilingual_text("reasoning_i18n", reasoning_i18n, 512)
+
+    @staticmethod
     def _is_positive_qty(value) -> bool:
         try:
             return Decimal(str(value)).copy_abs() > 0
@@ -183,6 +189,7 @@ class TradingClient:
         reduce_only: bool = False,
         client_order_id: str = "",
         reasoning: str = "",
+        reasoning_i18n: dict = None,
     ) -> dict:
         bot_id = self._require_bot_id()
         body = {
@@ -203,6 +210,11 @@ class TradingClient:
         if client_order_id:
             body["client_order_id"] = client_order_id
         reasoning_text = self._normalize_reasoning(reasoning)
+        reasoning_i18n_text = self._normalize_reasoning_i18n(reasoning_i18n)
+        if reasoning_i18n_text:
+            body["reasoning_i18n"] = reasoning_i18n_text
+            if not reasoning_text:
+                reasoning_text = default_text(reasoning_i18n_text)
         if reasoning_text:
             body["reasoning"] = reasoning_text
         payload = self._request("POST", f"/agent/realtime/bots/{bot_id}/orders", body)
@@ -362,8 +374,9 @@ class TradingClient:
         leverage: int,
         client_order_id: str = "",
         reasoning: str = "",
+        reasoning_i18n: dict = None,
     ) -> dict:
-        return self._open_market_order("buy", notional_usdt, leverage, client_order_id, reasoning)
+        return self._open_market_order("buy", notional_usdt, leverage, client_order_id, reasoning, reasoning_i18n)
 
     def open_short(
         self,
@@ -371,8 +384,9 @@ class TradingClient:
         leverage: int,
         client_order_id: str = "",
         reasoning: str = "",
+        reasoning_i18n: dict = None,
     ) -> dict:
-        return self._open_market_order("sell", notional_usdt, leverage, client_order_id, reasoning)
+        return self._open_market_order("sell", notional_usdt, leverage, client_order_id, reasoning, reasoning_i18n)
 
     def _open_market_order(
         self,
@@ -381,6 +395,7 @@ class TradingClient:
         leverage: int,
         client_order_id: str = "",
         reasoning: str = "",
+        reasoning_i18n: dict = None,
     ) -> dict:
         return self._submit_market_order(
             side,
@@ -388,6 +403,7 @@ class TradingClient:
             notional_usdt=notional_usdt,
             client_order_id=client_order_id,
             reasoning=reasoning,
+            reasoning_i18n=reasoning_i18n,
         )
 
     def close_position(
@@ -396,6 +412,7 @@ class TradingClient:
         close_qty: str = "",
         client_order_id: str = "",
         reasoning: str = "",
+        reasoning_i18n: dict = None,
     ) -> dict:
         """Close position through the unified order-reporting endpoint."""
         position = self._resolve_open_position(position_side)
@@ -418,6 +435,7 @@ class TradingClient:
             reduce_only=True,
             client_order_id=client_order_id,
             reasoning=reasoning,
+            reasoning_i18n=reasoning_i18n,
         )
 
     # ── Public display (no auth) ──

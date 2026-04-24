@@ -118,7 +118,13 @@ def _pct_text(value: Optional[float]) -> str:
     return f"{value * 100:+.2f}%"
 
 
-def build_open_reasoning(
+def _pct_text_en(value: Optional[float]) -> str:
+    if value is None:
+        return "unknown"
+    return f"{value * 100:+.2f}%"
+
+
+def build_open_reasoning_i18n(
     *,
     direction: str,
     symbol: str,
@@ -135,15 +141,25 @@ def build_open_reasoning(
     signal_text = "多头" if direction == "LONG" else "空头"
     regime = _latest_regime(df)
     change_24h = _recent_change_pct(df, _bars_for_24h(timeframe))
-    return (
-        f"自动交易在 {data_source} {symbol} {timeframe} K线检测到{signal_text}信号，"
-        f"当前标记价格约 {mark_price:.2f}，近24小时涨跌为 {_pct_text(change_24h)}，regime={regime}。"
-        f"本次按 risk_per_trade={params.risk_per_trade:.2f}、可用保证金约 {free_margin:.2f} 控制仓位，"
-        f"以 {leverage}x、名义金额约 {notional:.2f} {side_text}；后续由止损、止盈或反向信号管理退出。"
-    )
+    en_side_text = "open a long position" if direction == "LONG" else "open a short position"
+    en_signal_text = "bullish" if direction == "LONG" else "bearish"
+    return {
+        "zh": (
+            f"自动交易在 {data_source} {symbol} {timeframe} K线检测到{signal_text}信号，"
+            f"当前标记价格约 {mark_price:.2f}，近24小时涨跌为 {_pct_text(change_24h)}，regime={regime}。"
+            f"本次按 risk_per_trade={params.risk_per_trade:.2f}、可用保证金约 {free_margin:.2f} 控制仓位，"
+            f"以 {leverage}x、名义金额约 {notional:.2f} {side_text}；后续由止损、止盈或反向信号管理退出。"
+        ),
+        "en": (
+            f"The auto runner detected a {en_signal_text} signal on {data_source} {symbol} {timeframe} candles. "
+            f"The current mark price is about {mark_price:.2f}, the 24h change is {_pct_text_en(change_24h)}, and regime={regime}. "
+            f"Position size is controlled with risk_per_trade={params.risk_per_trade:.2f} and free margin around {free_margin:.2f}; "
+            f"it will {en_side_text} with {leverage}x leverage and about {notional:.2f} notional. Exits remain managed by stop loss, take profit, or a reverse signal."
+        ),
+    }
 
 
-def build_close_reasoning(
+def build_close_reasoning_i18n(
     *,
     position: dict,
     exit_reason: str,
@@ -161,11 +177,23 @@ def build_close_reasoning(
         "take_profit": "触发止盈条件，优先锁定已实现收益",
         "signal_reverse": "当前信号与持仓方向相反，按反向信号退出",
     }.get(exit_reason, f"触发退出条件 {exit_reason}")
-    return (
-        f"自动交易对 {symbol} {timeframe} 的 {pos_side} 仓位执行平仓："
-        f"入场价 {entry_price}，当前标记价格约 {mark_price:.2f}，杠杆后浮动收益约 {_pct_text(pnl_pct)}，regime={regime}。"
-        f"{reason_text}，因此通过 reduce-only 市价单退出该仓位。"
-    )
+    en_reason_text = {
+        "stop_loss": "The stop-loss condition was triggered, so drawdown and leverage risk take priority.",
+        "take_profit": "The take-profit condition was triggered, so the runner is locking in realized gains.",
+        "signal_reverse": "The current signal is opposite to the held position, so the runner exits on reversal.",
+    }.get(exit_reason, f"The exit condition {exit_reason} was triggered.")
+    return {
+        "zh": (
+            f"自动交易对 {symbol} {timeframe} 的 {pos_side} 仓位执行平仓："
+            f"入场价 {entry_price}，当前标记价格约 {mark_price:.2f}，杠杆后浮动收益约 {_pct_text(pnl_pct)}，regime={regime}。"
+            f"{reason_text}，因此通过 reduce-only 市价单退出该仓位。"
+        ),
+        "en": (
+            f"The auto runner is closing the {pos_side} position on {symbol} {timeframe}: "
+            f"entry price {entry_price}, current mark price about {mark_price:.2f}, leveraged unrealized return about {_pct_text_en(pnl_pct)}, and regime={regime}. "
+            f"{en_reason_text} The position is exited with a reduce-only market order."
+        ),
+    }
 
 
 def check_exit_conditions(
@@ -261,7 +289,7 @@ def run_cycle(client: TradingClient, params: DecisionParams, timeframe: str,
         if exit_reason:
             _log(f"  EXIT: {exit_reason} for {pos_side} @ entry={pos_entry}", log_file)
             close_order_id = f"auto-close-{cycle_num}-{int(time.time())}"
-            reasoning = build_close_reasoning(
+            reasoning_i18n = build_close_reasoning_i18n(
                 position=pos,
                 exit_reason=exit_reason,
                 symbol=symbol,
@@ -269,9 +297,10 @@ def run_cycle(client: TradingClient, params: DecisionParams, timeframe: str,
                 df=df,
                 mark_price=mark_price,
             )
-            result = client.close_position(pos_side, "", close_order_id, reasoning)
+            reasoning = reasoning_i18n["zh"]
+            result = client.close_position(pos_side, "", close_order_id, reasoning, reasoning_i18n)
             _log(f"  Closed: pnl={result.get('realized_pnl', '?')}", log_file)
-            return {"action": "close", "reason": exit_reason, "reasoning": reasoning, "result": result}
+            return {"action": "close", "reason": exit_reason, "reasoning": reasoning, "reasoning_i18n": reasoning_i18n, "result": result}
         else:
             _log(f"  HOLD: {pos_side} qty={pos_qty} unrealized={pos.get('unrealized_pnl','0')}", log_file)
             return {"action": "hold"}
@@ -290,7 +319,7 @@ def run_cycle(client: TradingClient, params: DecisionParams, timeframe: str,
 
     order_id = f"auto-{cycle_num}-{int(time.time())}"
     _log(f"  OPEN {direction}: ${notional:,.0f} @ {leverage}x (order_id={order_id})", log_file)
-    reasoning = build_open_reasoning(
+    reasoning_i18n = build_open_reasoning_i18n(
         direction=direction,
         symbol=symbol,
         timeframe=timeframe,
@@ -302,18 +331,19 @@ def run_cycle(client: TradingClient, params: DecisionParams, timeframe: str,
         notional=notional,
         leverage=leverage,
     )
+    reasoning = reasoning_i18n["zh"]
 
     if direction == "LONG":
-        result = client.open_long(f"{notional:.2f}", leverage, order_id, reasoning)
+        result = client.open_long(f"{notional:.2f}", leverage, order_id, reasoning, reasoning_i18n)
     else:
-        result = client.open_short(f"{notional:.2f}", leverage, order_id, reasoning)
+        result = client.open_short(f"{notional:.2f}", leverage, order_id, reasoning, reasoning_i18n)
 
     if "order_id" in result:
         _log(f"  FILLED: price={result.get('fill_price', '?')} qty={result.get('fill_qty', '?')}", log_file)
     else:
         _log(f"  ORDER FAILED: {result}", log_file)
 
-    return {"action": "open", "direction": direction, "reasoning": reasoning, "result": result}
+    return {"action": "open", "direction": direction, "reasoning": reasoning, "reasoning_i18n": reasoning_i18n, "result": result}
 
 
 def main():

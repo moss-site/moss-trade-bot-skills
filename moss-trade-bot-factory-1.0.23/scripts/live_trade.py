@@ -3,8 +3,8 @@
 
 Usage:
     # Bind (get credentials):
-    python live_trade.py bind --platform-url https://moss.site --pair-code ABCD-EFGH --name "利弗莫尔v2"
-    # --platform-url should be site origin only, e.g. https://moss.site
+    python live_trade.py bind --platform-url https://ai.moss.site --pair-code ABCD-EFGH --name "利弗莫尔v2"
+    # --platform-url should be site origin only, e.g. https://ai.moss.site
 
     # Check status:
     python live_trade.py status --key ak_xxx --secret as_xxx --bot-id agt_xxx
@@ -41,7 +41,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from trading_client import TradingClient
 from text_i18n import default_text, validate_bilingual_text
 
-PLATFORM_URL_HELP = "Platform site origin only, e.g. https://moss.site. The client appends API paths automatically."
+PLATFORM_URL_HELP = "Platform site origin only, e.g. https://ai.moss.site. The client appends API paths automatically."
 
 
 def resolve_base_url(args, creds=None) -> str:

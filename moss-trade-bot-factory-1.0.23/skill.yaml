@@ -1,5 +1,5 @@
-name: moss-trade-bot-factory-1.0.22-zh
-version: 1.1.1
+name: moss-trade-bot-factory-1.0.23
+version: 1.2
 author: fei-moss
 description: >
   从自然语言创建加密货币交易Bot，自动回测并支持周期反思进化。
@@ -28,8 +28,8 @@ config:
   trade_api_url:
     type: string
     required: false
-    default: "https://moss.site"
-    description: "可选 skill 配置项。模拟交易平台URL，默认 https://moss.site。Agent 应将其显式传给各脚本的 --platform-url。本 skill 不会把凭证发送到该地址以外的地方。"
+    default: "https://ai.moss.site"
+    description: "可选 skill 配置项。模拟交易平台URL，默认 https://ai.moss.site。Agent 应将其显式传给各脚本的 --platform-url。本 skill 不会把凭证发送到该地址以外的地方。"
     secret: false
   agent_creds_path:
     type: string

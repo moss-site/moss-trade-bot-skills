@@ -18,8 +18,8 @@ metadata: {"openclaw": {"requires": {"bins": ["python3"]}, "emoji": "🤖"}}
 
 - **本地优先**：Bot 创建、回测、进化默认都在本地完成；用户直接提供 CSV 时可完全离线
 - **数据边界**：回测 / 进化 / 上传验证只使用预置的 Hyperliquid 固定数据集 CSV（`scripts/data_cache/` 目录），不要从交易所下载数据
-- **平台功能（可选）**：只有用户明确要求 upload / bind / live 时才连接外部平台。默认平台地址使用 skill config `trade_api_url`，默认值 `https://moss.site`
-- **平台 URL 规则**：`--platform-url` 只填站点 origin，例如 `https://moss.site`；脚本会自动补上完整 API 前缀，并请求 `https://moss.site/api/v1/moss/agent/agents/bind`
+- **平台功能（可选）**：只有用户明确要求 upload / bind / live 时才连接外部平台。默认平台地址使用 skill config `trade_api_url`，默认值 `https://ai.moss.site`
+- **平台 URL 规则**：`--platform-url` 只填站点 origin，例如 `https://ai.moss.site`；脚本会自动补上完整 API 前缀，并请求 `https://ai.moss.site/api/v1/moss/agent/agents/bind`
 - **本地凭证**：平台凭证默认存 `~/.moss-trade-bot/agent_creds.json`；若 skill config `agent_creds_path` 已配置，优先使用该路径。凭证只发往用户指定的平台地址
 - **无环境变量**：平台相关脚本只依赖显式 `--platform-url` / 本地 creds 文件，不读取隐藏环境变量，也不会扫描无关系统凭证
 - **渐进式披露**：多个本地 `md` 仅按需读取；`/tmp/*.json` 只作为参数、指纹、回测结果的本地中间产物

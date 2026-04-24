@@ -4,7 +4,7 @@
 Usage:
     # Run with credentials file + bot params:
     python live_runner.py --creds ~/.moss-trade-bot/agent_creds.json --params-file bot_params.json --interval 15
-    # --platform-url should be site origin only, e.g. https://moss.site
+    # --platform-url should be site origin only, e.g. https://ai.moss.site
 
     # With evolution (reflect every N cycles):
     python live_runner.py --creds creds.json --params-file params.json --interval 15 --evolve-every 96
@@ -30,7 +30,7 @@ from core.fetcher import fetch_live_ohlcv
 from trading_client import TradingClient
 
 RUNNING = True
-PLATFORM_URL_HELP = "Platform site origin only, e.g. https://moss.site. The client appends API paths automatically."
+PLATFORM_URL_HELP = "Platform site origin only, e.g. https://ai.moss.site. The client appends API paths automatically."
 
 
 def _handle_stop(signum, frame):

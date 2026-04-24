@@ -3,10 +3,10 @@
 ## 通用前置
 
 - 凭证存储路径：优先使用 skill config `agent_creds_path`；未配置时默认 `~/.moss-trade-bot/agent_creds.json`（**不要用 /tmp**，重启会丢失）
-- 平台地址：优先使用 skill config `trade_api_url`；默认值 `https://moss.site`。也可通过 `--platform-url` 显式传入。首次 bind 后会保存在 `agent_creds.json` 的 `base_url` 字段中，供后续命令复用
+- 平台地址：优先使用 skill config `trade_api_url`；默认值 `https://ai.moss.site`。也可通过 `--platform-url` 显式传入。首次 bind 后会保存在 `agent_creds.json` 的 `base_url` 字段中，供后续命令复用
 - 认证方式：HMAC 签名（api_key + api_secret）
 - 下方示例统一写成默认路径；若 skill config 已提供 `agent_creds_path`，请整体替换示例中的凭证文件路径
-- `--platform-url` 只填站点 origin，例如 `https://moss.site`。脚本会自动拼成 `https://moss.site/api/v1/moss/agent/agents/bind`
+- `--platform-url` 只填站点 origin，例如 `https://ai.moss.site`。脚本会自动拼成 `https://ai.moss.site/api/v1/moss/agent/agents/bind`
 
 ## 依赖声明与无害性
 
@@ -26,7 +26,7 @@
    ```bash
    mkdir -p ~/.moss-trade-bot
    cd {baseDir}/scripts && python3 live_trade.py bind \
-     --platform-url "https://moss.site" \
+     --platform-url "https://ai.moss.site" \
      --pair-code "<pair_code>" \
      --name "<Bot名称>" --persona "<风格>" --description "<策略描述>" \
      --save ~/.moss-trade-bot/agent_creds.json
@@ -84,7 +84,7 @@ cd {baseDir}/scripts && python3 package_upload.py \
   --fingerprint-file /tmp/fingerprint.json \
   --result-file /tmp/evolve_result_final.json \
   --output /tmp/upload_package.json \
-  --platform-url https://moss.site \
+  --platform-url https://ai.moss.site \
   --creds ~/.moss-trade-bot/agent_creds.json
 ```
 
@@ -132,7 +132,7 @@ cd {baseDir}/scripts && python3 package_upload.py \
   ```bash
   cd {baseDir}/scripts && python3 live_trade.py create-bot \
     --creds ~/.moss-trade-bot/agent_creds.json \
-    --platform-url "https://moss.site" \
+    --platform-url "https://ai.moss.site" \
     --symbol "BTC/USDT" \
     --name "<Bot中文名称或默认名称>" \
     --name-zh "<Bot中文名称>" \
@@ -168,7 +168,7 @@ PY
 ```bash
 cd {baseDir}/scripts && python3 live_runner.py \
   --creds ~/.moss-trade-bot/agent_creds.json \
-  --platform-url "https://moss.site" \
+  --platform-url "https://ai.moss.site" \
   --symbol "BTC/USDT" \
   --params-file /tmp/bot_params.json \
   --interval 15 \

@@ -167,7 +167,7 @@ C) 调整参数重跑
 
 然后按手册中「实盘交易」章节执行。关键要点：
 - 先完成 **Pair Code 绑定**，再执行 **创建 Realtime Bot**；create-bot 必须显式传 `zh/en` 两份文案
-- **create-bot 和 live_runner 的 `--symbol` 使用 `BTC/USDT`**
+- **create-bot 和 live_runner 的 `--symbol` 使用 `BTC/USDC`**
 - 实盘信号默认使用 Hyperliquid K 线（`--data-source hyperliquid`），与平台后端价格源一致
 - 自动模式只有在用户明确说”启动自动交易”后进入；手动模式仍然逐笔确认
 - 其余平台地址、凭证路径、bot_id、命令参数统一以 `platform_ops.md` 为准，不在此重复展开

@@ -22,7 +22,7 @@ _DATA_DIR = _SHARE_ROOT / "data_cache"
 
 def normalize_coin(symbol: str) -> str:
     value = (symbol or "").strip().upper().replace("/", "").replace("-", "")
-    if value.endswith("USDT"):
+    if value.endswith("USDC"):
         return value[:-4]
     if value.endswith("USDC"):
         return value[:-4]

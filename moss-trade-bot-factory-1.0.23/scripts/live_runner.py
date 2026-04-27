@@ -106,7 +106,7 @@ def check_exit_conditions(
 
 
 def run_cycle(client: TradingClient, params: DecisionParams, timeframe: str,
-              cycle_num: int, data_source: str, symbol: str = "BTC/USDT",
+              cycle_num: int, data_source: str, symbol: str = "BTC/USDC",
               log_file: str = None) -> dict:
     """Run one trading decision cycle. Returns cycle result dict."""
 
@@ -205,7 +205,7 @@ def main():
         default="hyperliquid",
         help="Market data source for signal generation (Hyperliquid perpetuals).",
     )
-    parser.add_argument("--symbol", default="BTC/USDT", help="Trading pair, e.g. BTC/USDT or ETH/USDT (default: BTC/USDT)")
+    parser.add_argument("--symbol", default="BTC/USDC", help="Trading pair, e.g. BTC/USDC or ETH/USDC (default: BTC/USDC)")
     parser.add_argument("--max-cycles", type=int, default=0, help="Stop after N cycles (0=unlimited)")
     parser.add_argument("--log", default="", help="Log file path")
     parser.add_argument("--platform-url", default="", help=PLATFORM_URL_HELP + " Otherwise reuse base_url from creds file.")

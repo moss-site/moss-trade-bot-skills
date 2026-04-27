@@ -2,7 +2,7 @@
 """Generate data fingerprint from local CSV.
 
 Usage:
-    python fetch_data.py --data /path/to/ohlcv.csv --symbol BTC/USDT --timeframe 15m
+    python fetch_data.py --data /path/to/ohlcv.csv --symbol BTC/USDC --timeframe 15m
 """
 
 import argparse

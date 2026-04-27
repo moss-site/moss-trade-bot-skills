@@ -24,7 +24,7 @@ def _normalize_symbol_pair(raw: str) -> str:
             return ""
         return f"{base}/{quote}"
 
-    # Compact symbol formats, e.g. BTCUSDT
+    # Compact symbol formats, e.g. BTCUSDC
     for quote in ("USDT", "USDC", "BUSD"):
         if value.endswith(quote) and len(value) > len(quote):
             return f"{value[:-len(quote)]}/{quote}"
@@ -32,7 +32,7 @@ def _normalize_symbol_pair(raw: str) -> str:
 
 
 def _compact_symbol(pair: str) -> str:
-    """Convert slash format to compact format: 'ETH/USDT' -> 'ETHUSDT'."""
+    """Convert slash format to compact format: 'ETH/USDC' -> 'ETHUSDC'."""
     return pair.replace("/", "").replace("-", "").replace(":", "").upper()
 
 

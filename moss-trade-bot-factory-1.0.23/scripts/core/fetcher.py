@@ -28,7 +28,7 @@ SCRIPTS_DIR = os.path.dirname(os.path.dirname(__file__))
 def normalize_symbol_for_exchange(symbol: str, exchange_id: str) -> str:
     symbol = symbol.strip().upper().replace("-", "/")
     if exchange_id == "hyperliquid":
-        # Hyperliquid 使用 USDC 永续：BTC/USDT → BTC/USDC:USDC
+        # Hyperliquid USDC ：BTC/USDC:USDC
         base = symbol.split("/")[0].split(":")[0]
         return f"{base}/USDC:USDC"
     return symbol
@@ -116,13 +116,12 @@ def _fetch_ohlcv(
 
 
 def fetch_live_ohlcv(
-    symbol: str = "BTC/USDT",
+    symbol: str = "BTC/USDC",
     timeframe: str = "1h",
     days: int = 14,
     data_source: str = "hyperliquid",
     use_cache: bool = True,
 ) -> pd.DataFrame:
-    """下载 live mode 所需 K 线（Hyperliquid 永续合约）。"""
     if data_source not in LIVE_ALLOWED_EXCHANGE_IDS:
         raise ValueError(f"unsupported live data source: {data_source}")
     return _fetch_ohlcv(

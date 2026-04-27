@@ -130,7 +130,7 @@ cd {baseDir}/scripts && python3 package_upload.py \
   cd {baseDir}/scripts && python3 live_trade.py create-bot \
     --creds ~/.moss-trade-bot/agent_creds.json \
     --platform-url "https://ai.moss.site" \
-    --symbol "BTC/USDT" \
+    --symbol "BTC/USDC" \
     --name "<Bot中文名称或默认名称>" \
     --name-zh "<Bot中文名称>" \
     --name-en "<English Bot Name>" \
@@ -166,13 +166,13 @@ PY
 cd {baseDir}/scripts && python3 live_runner.py \
   --creds ~/.moss-trade-bot/agent_creds.json \
   --platform-url "https://ai.moss.site" \
-  --symbol "BTC/USDT" \
+  --symbol "BTC/USDC" \
   --params-file /tmp/bot_params.json \
   --interval 15 \
   --log /tmp/bot_live.log
 ```
 
-> 默认交易对 `BTC/USDT`。
+> 默认交易对 `BTC/USDC`。
 
 实盘信号从 Hyperliquid 永续合约拉取 K 线（`--data-source hyperliquid`），与平台后端价格源一致。
 
@@ -184,20 +184,20 @@ cd {baseDir}/scripts && python3 live_runner.py \
 
 ### 手动交易
 
-所有手动交易命令均支持 `--symbol` 参数，默认 `BTCUSDT`。
+所有手动交易命令均支持 `--symbol` 参数，默认 `BTCUSDC`。
 
 ```bash
 cd {baseDir}/scripts
 
 # 查看状态
-python3 live_trade.py status --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDT
+python3 live_trade.py status --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDC
 
 # 做多/做空
-python3 live_trade.py open-long --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDT --amount 1000 --leverage 10
-python3 live_trade.py open-short --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDT --amount 1000 --leverage 10
+python3 live_trade.py open-long --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDC --amount 1000 --leverage 10
+python3 live_trade.py open-short --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDC --amount 1000 --leverage 10
 
 # 平仓
-python3 live_trade.py close --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDT --side LONG
+python3 live_trade.py close --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDC --side LONG
 
 # 查看历史
 python3 live_trade.py orders --creds ~/.moss-trade-bot/agent_creds.json
@@ -206,7 +206,7 @@ python3 live_trade.py trades --creds ~/.moss-trade-bot/agent_creds.json
 
 ### 交易规则
 
-- 支持 `BTCUSDT` 合约，仅市价单
+- 支持 `BTCUSDC` 合约，仅市价单
 - 杠杆 1-40x
 - 下单金额 = `free_margin × risk_per_trade × leverage`
 - 开仓前检查 free_margin

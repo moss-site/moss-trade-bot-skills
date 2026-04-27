@@ -264,7 +264,7 @@ def main():
     p.add_argument("--creds", default="")
     p.add_argument("--bot-id", default="", help="Realtime bot id (required when using --key/--secret directly)")
     p.add_argument("--symbol", default="BTCUSDC", help="Trading symbol (default: BTCUSDC)")
-    p.add_argument("--amount", required=True, help="Notional USDT")
+    p.add_argument("--amount", required=True, help="Notional USDC")
     p.add_argument("--leverage", type=int, required=True)
     p.add_argument("--order-id", default="")
     p.add_argument("--platform-url", default="", help=PLATFORM_URL_HELP + " Otherwise reuse base_url from creds file.")

@@ -12,6 +12,7 @@ import secrets
 import time
 import urllib.parse
 import urllib.request
+from decimal import Decimal, InvalidOperation
 
 from text_i18n import default_text, validate_bilingual_text
 
@@ -129,6 +130,95 @@ class TradingClient:
                 return items
             return payload
         return payload
+
+    @staticmethod
+    def _normalize_position_side(position_side: str) -> str:
+        raw = str(position_side or "").strip().upper()
+        if raw in ("LONG", "BUY"):
+            return "LONG"
+        if raw in ("SHORT", "SELL"):
+            return "SHORT"
+        return ""
+
+    @staticmethod
+    def _normalize_reasoning(reasoning: str = "") -> str:
+        return str(reasoning or "").strip()
+
+    @staticmethod
+    def _normalize_reasoning_en(reasoning_en: str = "") -> str:
+        text = str(reasoning_en or "").strip()
+        if not text:
+            return ""
+        validate_bilingual_text("reasoning", {"zh": "中文占位", "en": text}, 512)
+        return text
+
+    @staticmethod
+    def _is_positive_qty(value) -> bool:
+        try:
+            return Decimal(str(value)).copy_abs() > 0
+        except (InvalidOperation, TypeError, ValueError):
+            return False
+
+    def _resolve_open_position(self, position_side: str = "") -> dict:
+        positions = self.get_positions()
+        if isinstance(positions, dict):
+            message = positions.get("message") or positions.get("code") or json.dumps(positions, ensure_ascii=False)
+            raise ValueError(f"failed to load positions: {message}")
+        if not isinstance(positions, list):
+            raise ValueError("failed to load positions")
+
+        expected_side = self._normalize_position_side(position_side)
+        for position in positions:
+            position_symbol = self._normalize_symbol(position.get("symbol", "") or self.symbol)
+            if position_symbol != self.symbol:
+                continue
+            side = self._normalize_position_side(position.get("side") or position.get("position_side"))
+            qty = position.get("qty", position.get("net_qty", "0"))
+            if not self._is_positive_qty(qty):
+                continue
+            if expected_side and side and side != expected_side:
+                continue
+            return position
+        raise ValueError(f"no open position found for {self.symbol}")
+
+    def _submit_market_order(
+        self,
+        side: str,
+        leverage: int,
+        *,
+        notional_usdt: str = "",
+        qty: str = "",
+        reduce_only: bool = False,
+        client_order_id: str = "",
+        reasoning: str = "",
+        reasoning_en: str = "",
+    ) -> dict:
+        bot_id = self._require_bot_id()
+        body = {
+            "symbol": self.symbol,
+            "side": side,
+            "order_type": "market",
+            "time_in_force": "ioc",
+            "post_only": False,
+            "reduce_only": reduce_only,
+            "leverage": max(int(leverage), 1),
+        }
+        if qty:
+            body["qty"] = str(qty)
+        elif notional_usdt:
+            body["notional"] = str(notional_usdt)
+        else:
+            raise ValueError("qty or notional_usdt required")
+        if client_order_id:
+            body["client_order_id"] = client_order_id
+        reasoning_text = self._normalize_reasoning(reasoning)
+        reasoning_en_text = self._normalize_reasoning_en(reasoning_en)
+        if reasoning_text:
+            body["reasoning"] = reasoning_text
+        if reasoning_en_text:
+            body["reasoning_en"] = reasoning_en_text
+        payload = self._request("POST", f"/agent/realtime/bots/{bot_id}/orders", body)
+        return self._adapt_order_result(payload)
 
     @staticmethod
     def _adapt_order_result(payload):
@@ -278,42 +368,75 @@ class TradingClient:
                                 query={"page": "1", "page_size": str(page_size)})
         return self._extract_items(payload)
 
-    def open_long(self, notional_usdt: str, leverage: int, client_order_id: str = "") -> dict:
-        return self._open_market_order("buy", notional_usdt, leverage, client_order_id)
+    def open_long(
+        self,
+        notional_usdt: str,
+        leverage: int,
+        client_order_id: str = "",
+        reasoning: str = "",
+        reasoning_en: str = "",
+    ) -> dict:
+        return self._open_market_order("buy", notional_usdt, leverage, client_order_id, reasoning, reasoning_en)
 
-    def open_short(self, notional_usdt: str, leverage: int, client_order_id: str = "") -> dict:
-        return self._open_market_order("sell", notional_usdt, leverage, client_order_id)
+    def open_short(
+        self,
+        notional_usdt: str,
+        leverage: int,
+        client_order_id: str = "",
+        reasoning: str = "",
+        reasoning_en: str = "",
+    ) -> dict:
+        return self._open_market_order("sell", notional_usdt, leverage, client_order_id, reasoning, reasoning_en)
 
-    def _open_market_order(self, side: str, notional_usdt: str, leverage: int, client_order_id: str = "") -> dict:
-        bot_id = self._require_bot_id()
-        body = {
-            "symbol": self.symbol,
-            "side": side,
-            "order_type": "market",
-            "time_in_force": "ioc",
-            "post_only": False,
-            "reduce_only": False,
-            "notional": notional_usdt,
-            "leverage": leverage,
-        }
-        if client_order_id:
-            body["client_order_id"] = client_order_id
-        payload = self._request("POST", f"/agent/realtime/bots/{bot_id}/orders", body)
-        return self._adapt_order_result(payload)
-
-    def close_position(self, position_side: str = "", close_qty: str = "") -> dict:
-        """Close position. position_side is accepted for v1 compat but unused in v2."""
-        _ = position_side  # v2 resolves side from bot_id + symbol in path.
-        bot_id = self._require_bot_id()
-        body = {}
-        if close_qty:
-            body["qty"] = close_qty
-        payload = self._request(
-            "POST",
-            f"/agent/realtime/bots/{bot_id}/positions/{self.symbol}/close",
-            body,
+    def _open_market_order(
+        self,
+        side: str,
+        notional_usdt: str,
+        leverage: int,
+        client_order_id: str = "",
+        reasoning: str = "",
+        reasoning_en: str = "",
+    ) -> dict:
+        return self._submit_market_order(
+            side,
+            leverage,
+            notional_usdt=notional_usdt,
+            client_order_id=client_order_id,
+            reasoning=reasoning,
+            reasoning_en=reasoning_en,
         )
-        return self._adapt_order_result(payload)
+
+    def close_position(
+        self,
+        position_side: str = "",
+        close_qty: str = "",
+        client_order_id: str = "",
+        reasoning: str = "",
+        reasoning_en: str = "",
+    ) -> dict:
+        """Close position through the unified order-reporting endpoint."""
+        position = self._resolve_open_position(position_side)
+        current_side = self._normalize_position_side(position.get("side") or position.get("position_side"))
+        if current_side == "LONG":
+            close_side = "sell"
+        elif current_side == "SHORT":
+            close_side = "buy"
+        else:
+            raise ValueError(f"unsupported position side: {position.get('side') or position.get('position_side')}")
+
+        close_qty_value = str(close_qty or position.get("qty") or position.get("net_qty") or "").strip()
+        if not close_qty_value:
+            raise ValueError("close qty unavailable from current position")
+        leverage = int(position.get("leverage") or 1)
+        return self._submit_market_order(
+            close_side,
+            leverage,
+            qty=close_qty_value,
+            reduce_only=True,
+            client_order_id=client_order_id,
+            reasoning=reasoning,
+            reasoning_en=reasoning_en,
+        )
 
     # ── Public display (no auth) ──
 

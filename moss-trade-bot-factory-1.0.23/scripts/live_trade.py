@@ -10,13 +10,13 @@ Usage:
     python live_trade.py status --key ak_xxx --secret as_xxx --bot-id agt_xxx
 
     # Open long:
-    python live_trade.py open-long --key ak_xxx --secret as_xxx --bot-id agt_xxx --amount 1000 --leverage 10
+    python live_trade.py open-long --key ak_xxx --secret as_xxx --bot-id agt_xxx --amount 1000 --leverage 10 --reasoning-zh "<中文说明>" --reasoning-en "<English note>"
 
     # Open short:
-    python live_trade.py open-short --key ak_xxx --secret as_xxx --bot-id agt_xxx --amount 1000 --leverage 10
+    python live_trade.py open-short --key ak_xxx --secret as_xxx --bot-id agt_xxx --amount 1000 --leverage 10 --reasoning-zh "<中文说明>" --reasoning-en "<English note>"
 
     # Close position:
-    python live_trade.py close --key ak_xxx --secret as_xxx --bot-id agt_xxx --side LONG
+    python live_trade.py close --key ak_xxx --secret as_xxx --bot-id agt_xxx --side LONG --reasoning-zh "<中文说明>" --reasoning-en "<English note>"
 
     # Get price:
     python live_trade.py price --key ak_xxx --secret as_xxx
@@ -169,21 +169,38 @@ def cmd_price(args):
     print(json.dumps(client.get_price(), indent=2))
 
 
+def resolve_reasoning(args):
+    reasoning_zh = getattr(args, "reasoning_zh", "")
+    reasoning_en = getattr(args, "reasoning_en", "")
+    if reasoning_zh or reasoning_en:
+        reasoning_pair = validate_bilingual_text(
+            "reasoning",
+            {"zh": reasoning_zh, "en": reasoning_en},
+            512,
+        )
+        reasoning = args.reasoning or default_text(reasoning_pair)
+        return reasoning, reasoning_pair["en"]
+    return args.reasoning or "", ""
+
+
 def cmd_open_long(args):
     client = load_client(args)
-    result = client.open_long(args.amount, args.leverage, args.order_id or "")
+    reasoning, reasoning_en = resolve_reasoning(args)
+    result = client.open_long(args.amount, args.leverage, args.order_id or "", reasoning, reasoning_en)
     print(json.dumps(result, indent=2))
 
 
 def cmd_open_short(args):
     client = load_client(args)
-    result = client.open_short(args.amount, args.leverage, args.order_id or "")
+    reasoning, reasoning_en = resolve_reasoning(args)
+    result = client.open_short(args.amount, args.leverage, args.order_id or "", reasoning, reasoning_en)
     print(json.dumps(result, indent=2))
 
 
 def cmd_close(args):
     client = load_client(args)
-    result = client.close_position(args.side, args.qty or "")
+    reasoning, reasoning_en = resolve_reasoning(args)
+    result = client.close_position(args.side, args.qty or "", args.order_id or "", reasoning, reasoning_en)
     print(json.dumps(result, indent=2))
 
 
@@ -255,6 +272,9 @@ def main():
     p.add_argument("--amount", required=True, help="Notional USDT")
     p.add_argument("--leverage", type=int, required=True)
     p.add_argument("--order-id", default="")
+    p.add_argument("--reasoning", default="", help="Legacy single-language decision note; prefer --reasoning-zh/--reasoning-en")
+    p.add_argument("--reasoning-zh", default="", help="Chinese decision note sent as reasoning")
+    p.add_argument("--reasoning-en", default="", help="English decision note sent as reasoning_en")
     p.add_argument("--platform-url", default="", help=PLATFORM_URL_HELP + " Otherwise reuse base_url from creds file.")
 
     # open-short
@@ -264,9 +284,12 @@ def main():
     p.add_argument("--creds", default="")
     p.add_argument("--bot-id", default="", help="Realtime bot id (required when using --key/--secret directly)")
     p.add_argument("--symbol", default="BTCUSDC", help="Trading symbol (default: BTCUSDC)")
-    p.add_argument("--amount", required=True, help="Notional USDC")
+    p.add_argument("--amount", required=True, help="Notional USDT")
     p.add_argument("--leverage", type=int, required=True)
     p.add_argument("--order-id", default="")
+    p.add_argument("--reasoning", default="", help="Legacy single-language decision note; prefer --reasoning-zh/--reasoning-en")
+    p.add_argument("--reasoning-zh", default="", help="Chinese decision note sent as reasoning")
+    p.add_argument("--reasoning-en", default="", help="English decision note sent as reasoning_en")
     p.add_argument("--platform-url", default="", help=PLATFORM_URL_HELP + " Otherwise reuse base_url from creds file.")
 
     # close
@@ -278,6 +301,10 @@ def main():
     p.add_argument("--symbol", default="BTCUSDC", help="Trading symbol (default: BTCUSDC)")
     p.add_argument("--side", required=True, choices=["LONG", "SHORT"])
     p.add_argument("--qty", default="", help="Qty, empty=close all")
+    p.add_argument("--order-id", default="", help="Optional client_order_id for idempotent close orders")
+    p.add_argument("--reasoning", default="", help="Legacy single-language exit note; prefer --reasoning-zh/--reasoning-en")
+    p.add_argument("--reasoning-zh", default="", help="Chinese exit note sent as reasoning")
+    p.add_argument("--reasoning-en", default="", help="English exit note sent as reasoning_en")
     p.add_argument("--platform-url", default="", help=PLATFORM_URL_HELP + " Otherwise reuse base_url from creds file.")
 
     # orders

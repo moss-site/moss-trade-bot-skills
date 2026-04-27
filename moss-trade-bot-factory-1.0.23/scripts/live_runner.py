@@ -65,6 +65,137 @@ def compute_current_signal(df: pd.DataFrame, params: DecisionParams) -> int:
     return int(signals.iloc[-1])
 
 
+def _latest_regime(df: pd.DataFrame) -> str:
+    try:
+        regime = classify_regime(df, version="v1")
+        if len(regime) > 0:
+            return str(regime.iloc[-1])
+    except Exception:
+        pass
+    return "UNKNOWN"
+
+
+def _recent_change_pct(df: pd.DataFrame, bars: int) -> Optional[float]:
+    if len(df) <= bars:
+        return None
+    start = _to_float(df["close"].iloc[-bars - 1], 0.0)
+    end = _to_float(df["close"].iloc[-1], 0.0)
+    if start <= 0:
+        return None
+    return (end - start) / start
+
+
+def _bars_for_24h(timeframe: str) -> int:
+    raw = str(timeframe or "").strip().lower()
+    try:
+        if raw.endswith("m"):
+            minutes = max(1, int(raw[:-1]))
+            return max(1, int(round(24 * 60 / minutes)))
+        if raw.endswith("h"):
+            hours = max(1, int(raw[:-1]))
+            return max(1, int(round(24 / hours)))
+    except ValueError:
+        pass
+    return 96
+
+
+def _position_pnl_pct(position: dict, mark_price: float) -> Optional[float]:
+    entry_price = _to_float(position.get("entry_price"), 0.0)
+    if entry_price <= 0 or mark_price <= 0:
+        return None
+    leverage = _to_float(position.get("leverage"), 1.0)
+    side = str(position.get("position_side") or position.get("side") or "").upper()
+    if side in ("LONG", "BUY"):
+        return (mark_price - entry_price) / entry_price * leverage
+    if side in ("SHORT", "SELL"):
+        return (entry_price - mark_price) / entry_price * leverage
+    return None
+
+
+def _pct_text(value: Optional[float]) -> str:
+    if value is None:
+        return "未知"
+    return f"{value * 100:+.2f}%"
+
+
+def _pct_text_en(value: Optional[float]) -> str:
+    if value is None:
+        return "unknown"
+    return f"{value * 100:+.2f}%"
+
+
+def build_open_reasoning_pair(
+    *,
+    direction: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    df: pd.DataFrame,
+    params: DecisionParams,
+    mark_price: float,
+    free_margin: float,
+    notional: float,
+    leverage: int,
+) -> dict:
+    side_text = "开多" if direction == "LONG" else "开空"
+    signal_text = "多头" if direction == "LONG" else "空头"
+    regime = _latest_regime(df)
+    change_24h = _recent_change_pct(df, _bars_for_24h(timeframe))
+    en_side_text = "open a long position" if direction == "LONG" else "open a short position"
+    en_signal_text = "bullish" if direction == "LONG" else "bearish"
+    return {
+        "zh": (
+            f"自动交易在 {data_source} {symbol} {timeframe} K线检测到{signal_text}信号，"
+            f"当前标记价格约 {mark_price:.2f}，近24小时涨跌为 {_pct_text(change_24h)}，regime={regime}。"
+            f"本次按 risk_per_trade={params.risk_per_trade:.2f}、可用保证金约 {free_margin:.2f} 控制仓位，"
+            f"以 {leverage}x、名义金额约 {notional:.2f} {side_text}；后续由止损、止盈或反向信号管理退出。"
+        ),
+        "en": (
+            f"The auto runner detected a {en_signal_text} signal on {data_source} {symbol} {timeframe} candles. "
+            f"The current mark price is about {mark_price:.2f}, the 24h change is {_pct_text_en(change_24h)}, and regime={regime}. "
+            f"Position size is controlled with risk_per_trade={params.risk_per_trade:.2f} and free margin around {free_margin:.2f}; "
+            f"it will {en_side_text} with {leverage}x leverage and about {notional:.2f} notional. Exits remain managed by stop loss, take profit, or a reverse signal."
+        ),
+    }
+
+
+def build_close_reasoning_pair(
+    *,
+    position: dict,
+    exit_reason: str,
+    symbol: str,
+    timeframe: str,
+    df: pd.DataFrame,
+    mark_price: float,
+) -> dict:
+    pos_side = str(position.get("position_side") or position.get("side") or "").upper()
+    entry_price = position.get("entry_price", "?")
+    pnl_pct = _position_pnl_pct(position, mark_price)
+    regime = _latest_regime(df)
+    reason_text = {
+        "stop_loss": "触发止损条件，优先控制回撤和杠杆风险",
+        "take_profit": "触发止盈条件，优先锁定已实现收益",
+        "signal_reverse": "当前信号与持仓方向相反，按反向信号退出",
+    }.get(exit_reason, f"触发退出条件 {exit_reason}")
+    en_reason_text = {
+        "stop_loss": "The stop-loss condition was triggered, so drawdown and leverage risk take priority.",
+        "take_profit": "The take-profit condition was triggered, so the runner is locking in realized gains.",
+        "signal_reverse": "The current signal is opposite to the held position, so the runner exits on reversal.",
+    }.get(exit_reason, f"The exit condition {exit_reason} was triggered.")
+    return {
+        "zh": (
+            f"自动交易对 {symbol} {timeframe} 的 {pos_side} 仓位执行平仓："
+            f"入场价 {entry_price}，当前标记价格约 {mark_price:.2f}，杠杆后浮动收益约 {_pct_text(pnl_pct)}，regime={regime}。"
+            f"{reason_text}，因此通过 reduce-only 市价单退出该仓位。"
+        ),
+        "en": (
+            f"The auto runner is closing the {pos_side} position on {symbol} {timeframe}: "
+            f"entry price {entry_price}, current mark price about {mark_price:.2f}, leveraged unrealized return about {_pct_text_en(pnl_pct)}, and regime={regime}. "
+            f"{en_reason_text} The position is exited with a reduce-only market order."
+        ),
+    }
+
+
 def check_exit_conditions(
     position: dict, params: DecisionParams, df: pd.DataFrame, mark_price: float
 ) -> Optional[str]:
@@ -106,7 +237,7 @@ def check_exit_conditions(
 
 
 def run_cycle(client: TradingClient, params: DecisionParams, timeframe: str,
-              cycle_num: int, data_source: str, symbol: str = "BTC/USDC",
+              cycle_num: int, data_source: str, symbol: str = "BTC/USDT",
               log_file: str = None) -> dict:
     """Run one trading decision cycle. Returns cycle result dict."""
 
@@ -145,7 +276,7 @@ def run_cycle(client: TradingClient, params: DecisionParams, timeframe: str,
     free_margin = _to_float(account.get("free_margin", account.get("available_equity")), 0.0)
     wallet_balance = _to_float(account.get("wallet_balance", account.get("account_value")), 0.0)
 
-    base_asset = symbol.split("/")[0] if "/" in symbol else symbol.rstrip("USDC") or symbol
+    base_asset = symbol.split("/")[0] if "/" in symbol else symbol.rstrip("USDT") or symbol
     _log(f"  {base_asset}=${mark_price:,.2f} | balance=${wallet_balance:,.2f} | "
          f"free=${free_margin:,.2f} | positions={len(positions)}", log_file)
 
@@ -157,9 +288,20 @@ def run_cycle(client: TradingClient, params: DecisionParams, timeframe: str,
         pos_entry = pos.get("entry_price", "?")
         if exit_reason:
             _log(f"  EXIT: {exit_reason} for {pos_side} @ entry={pos_entry}", log_file)
-            result = client.close_position(pos_side)
+            close_order_id = f"auto-close-{cycle_num}-{int(time.time())}"
+            reasoning_pair = build_close_reasoning_pair(
+                position=pos,
+                exit_reason=exit_reason,
+                symbol=symbol,
+                timeframe=timeframe,
+                df=df,
+                mark_price=mark_price,
+            )
+            reasoning = reasoning_pair["zh"]
+            reasoning_en = reasoning_pair["en"]
+            result = client.close_position(pos_side, "", close_order_id, reasoning, reasoning_en)
             _log(f"  Closed: pnl={result.get('realized_pnl', '?')}", log_file)
-            return {"action": "close", "reason": exit_reason, "result": result}
+            return {"action": "close", "reason": exit_reason, "reasoning": reasoning, "reasoning_en": reasoning_en, "result": result}
         else:
             _log(f"  HOLD: {pos_side} qty={pos_qty} unrealized={pos.get('unrealized_pnl','0')}", log_file)
             return {"action": "hold"}
@@ -178,18 +320,32 @@ def run_cycle(client: TradingClient, params: DecisionParams, timeframe: str,
 
     order_id = f"auto-{cycle_num}-{int(time.time())}"
     _log(f"  OPEN {direction}: ${notional:,.0f} @ {leverage}x (order_id={order_id})", log_file)
+    reasoning_pair = build_open_reasoning_pair(
+        direction=direction,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        df=df,
+        params=params,
+        mark_price=mark_price,
+        free_margin=free_margin,
+        notional=notional,
+        leverage=leverage,
+    )
+    reasoning = reasoning_pair["zh"]
+    reasoning_en = reasoning_pair["en"]
 
     if direction == "LONG":
-        result = client.open_long(f"{notional:.2f}", leverage, order_id)
+        result = client.open_long(f"{notional:.2f}", leverage, order_id, reasoning, reasoning_en)
     else:
-        result = client.open_short(f"{notional:.2f}", leverage, order_id)
+        result = client.open_short(f"{notional:.2f}", leverage, order_id, reasoning, reasoning_en)
 
     if "order_id" in result:
         _log(f"  FILLED: price={result.get('fill_price', '?')} qty={result.get('fill_qty', '?')}", log_file)
     else:
         _log(f"  ORDER FAILED: {result}", log_file)
 
-    return {"action": "open", "direction": direction, "result": result}
+    return {"action": "open", "direction": direction, "reasoning": reasoning, "reasoning_en": reasoning_en, "result": result}
 
 
 def main():
@@ -205,7 +361,7 @@ def main():
         default="hyperliquid",
         help="Market data source for signal generation (Hyperliquid perpetuals).",
     )
-    parser.add_argument("--symbol", default="BTC/USDC", help="Trading pair, e.g. BTC/USDC or ETH/USDC (default: BTC/USDC)")
+    parser.add_argument("--symbol", default="BTC/USDT", help="Trading pair, e.g. BTC/USDT or ETH/USDT (default: BTC/USDT)")
     parser.add_argument("--max-cycles", type=int, default=0, help="Stop after N cycles (0=unlimited)")
     parser.add_argument("--log", default="", help="Log file path")
     parser.add_argument("--platform-url", default="", help=PLATFORM_URL_HELP + " Otherwise reuse base_url from creds file.")

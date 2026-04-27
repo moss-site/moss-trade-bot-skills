@@ -130,7 +130,7 @@ cd {baseDir}/scripts && python3 package_upload.py \
   cd {baseDir}/scripts && python3 live_trade.py create-bot \
     --creds ~/.moss-trade-bot/agent_creds.json \
     --platform-url "https://ai.moss.site" \
-    --symbol "BTC/USDC" \
+    --symbol "BTC/USDT" \
     --name "<Bot中文名称或默认名称>" \
     --name-zh "<Bot中文名称>" \
     --name-en "<English Bot Name>" \
@@ -166,13 +166,13 @@ PY
 cd {baseDir}/scripts && python3 live_runner.py \
   --creds ~/.moss-trade-bot/agent_creds.json \
   --platform-url "https://ai.moss.site" \
-  --symbol "BTC/USDC" \
+  --symbol "BTC/USDT" \
   --params-file /tmp/bot_params.json \
   --interval 15 \
   --log /tmp/bot_live.log
 ```
 
-> 默认交易对 `BTC/USDC`。
+> 默认交易对 `BTC/USDT`。
 
 实盘信号从 Hyperliquid 永续合约拉取 K 线（`--data-source hyperliquid`），与平台后端价格源一致。
 
@@ -184,20 +184,20 @@ cd {baseDir}/scripts && python3 live_runner.py \
 
 ### 手动交易
 
-所有手动交易命令均支持 `--symbol` 参数，默认 `BTCUSDC`。
+所有手动交易命令均支持 `--symbol` 参数，默认 `BTCUSDT`。
 
 ```bash
 cd {baseDir}/scripts
 
 # 查看状态
-python3 live_trade.py status --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDC
+python3 live_trade.py status --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDT
 
 # 做多/做空
-python3 live_trade.py open-long --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDC --amount 1000 --leverage 10
-python3 live_trade.py open-short --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDC --amount 1000 --leverage 10
+python3 live_trade.py open-long --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDT --amount 1000 --leverage 10 --reasoning-zh "<由 skill / LLM 按当次信号生成的中文说明>" --reasoning-en "<English decision note generated from the current signal>"
+python3 live_trade.py open-short --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDT --amount 1000 --leverage 10 --reasoning-zh "<由 skill / LLM 按当次信号生成的中文说明>" --reasoning-en "<English decision note generated from the current signal>"
 
 # 平仓
-python3 live_trade.py close --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDC --side LONG
+python3 live_trade.py close --creds ~/.moss-trade-bot/agent_creds.json --symbol BTCUSDT --side LONG --reasoning-zh "<由 skill / LLM 按平仓原因生成的中文说明>" --reasoning-en "<English exit note generated from the close reason>"
 
 # 查看历史
 python3 live_trade.py orders --creds ~/.moss-trade-bot/agent_creds.json
@@ -206,12 +206,15 @@ python3 live_trade.py trades --creds ~/.moss-trade-bot/agent_creds.json
 
 ### 交易规则
 
-- 支持 `BTCUSDC` 合约，仅市价单
+- 支持 `BTCUSDT` 合约，仅市价单
 - 杠杆 1-40x
 - 下单金额 = `free_margin × risk_per_trade × leverage`
 - 开仓前检查 free_margin
 - STALE_MARK_PRICE → 等待几秒重试
 - 用 `client_order_id` 保证幂等（格式：`{bot_name}-{timestamp}`）
+- `open-long` / `open-short` / `close` 均支持 `--reasoning-zh` / `--reasoning-en`，并兼容旧 `--reasoning`；上报字段保持两列：`reasoning` 使用中文版本，`reasoning_en` 使用英文版本
+- `orders` / `trades` 查询结果会返回 `reasoning` / `reasoning_en`（若该笔订单有上报）；跟单只读视角不会暴露该字段
+- `live_runner.py` 自动开仓 / 平仓时会随订单上报运行时生成的 `reasoning` + `reasoning_en`；若用户要求更高质量 LLM 风格说明，应由 skill 自己完成逐轮决策并调用 `live_trade.py ... --reasoning-zh ... --reasoning-en ...`
 
 ### 安全护栏
 

@@ -2,7 +2,7 @@
 """Generate data fingerprint from local CSV.
 
 Usage:
-    python fetch_data.py --data /path/to/ohlcv.csv --symbol BTC/USDC --timeframe 15m
+    python fetch_data.py --data /path/to/ohlcv.csv --symbol BTC/USDT --timeframe 15m
 """
 
 import argparse
@@ -24,7 +24,7 @@ def _normalize_symbol_pair(raw: str) -> str:
             return ""
         return f"{base}/{quote}"
 
-    # Compact symbol formats, e.g. BTCUSDC
+    # Compact symbol formats, e.g. BTCUSDT
     for quote in ("USDT", "USDC", "BUSD"):
         if value.endswith(quote) and len(value) > len(quote):
             return f"{value[:-len(quote)]}/{quote}"
@@ -32,7 +32,7 @@ def _normalize_symbol_pair(raw: str) -> str:
 
 
 def _compact_symbol(pair: str) -> str:
-    """Convert slash format to compact format: 'ETH/USDC' -> 'ETHUSDC'."""
+    """Convert slash format to compact format: 'ETH/USDT' -> 'ETHUSDT'."""
     return pair.replace("/", "").replace("-", "").replace(":", "").upper()
 
 

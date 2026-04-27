@@ -145,7 +145,7 @@ def run_cycle(client: TradingClient, params: DecisionParams, timeframe: str,
     free_margin = _to_float(account.get("free_margin", account.get("available_equity")), 0.0)
     wallet_balance = _to_float(account.get("wallet_balance", account.get("account_value")), 0.0)
 
-    base_asset = symbol.split("/")[0] if "/" in symbol else symbol.rstrip("USDT") or symbol
+    base_asset = symbol.split("/")[0] if "/" in symbol else symbol.rstrip("USDC") or symbol
     _log(f"  {base_asset}=${mark_price:,.2f} | balance=${wallet_balance:,.2f} | "
          f"free=${free_margin:,.2f} | positions={len(positions)}", log_file)
 

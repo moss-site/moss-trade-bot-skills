@@ -570,16 +570,21 @@ def run_backtest(
             ))
         last_fed_idx = max(last_fed_idx, end_idx - 1)
 
-        # Mark price from bar AT evaluation_at (not before it)
-        # Matches Go: ReplayQuote(evaluationAt) → loadReplayQuoteCandle(evaluationAt)
-        # → returns the 1m bar at evaluationAt → close = 15m bar at evaluationAt
+        # Mark price = close of the FIRST 1-minute synthesized bar within the
+        # 15m bar at evaluation_at. Backend's FixedDatasetKlineSource.ReplayQuote
+        # slices 1m bars in [evaluation_at - 1min, evaluation_at] and returns
+        # the last bar's close. With linear 1m synthesis (synthesizeReplayMinuteBars):
+        #   1m bar 0 close = bar.open + (bar.close - bar.open) / 15
+        # That single subdivision is the prevailing price at evaluation_at.
         mark_bar_idx = end_idx  # bar AT evaluation_at
         if mark_bar_idx >= len(df):
             mark_bar_idx = len(df) - 1
         bar = df.iloc[mark_bar_idx]
         fill_time = str(df["timestamp"].iloc[mark_bar_idx])
 
-        d_mark = _D(bar["close"])
+        d_open = _D(bar["open"])
+        d_close = _D(bar["close"])
+        d_mark = d_open + (d_close - d_open) / _D(15)
         mark_price = float(d_mark)
 
         # Funding settlement between intervals (no recovery/liquidation for fixed dataset)
@@ -593,7 +598,9 @@ def run_backtest(
             d_unrealized = (state.entry_price - d_mark) * state.net_qty.copy_abs()
         d_equity = state.wallet + d_unrealized
 
-        # Snapshot 1: mark-to-market BEFORE reconcile
+        # Snapshot 1: backend MarkToMarket BEFORE reconcile → periodic snapshot
+        # at evaluation_at (mark applied, no order yet). Source-core 2.0 always
+        # emits this regardless of whether a trade fires.
         equity_points.append(float(d_equity))
 
         desired = _derive_desired_from_evaluator(
@@ -609,7 +616,11 @@ def run_backtest(
         )
         completed_trades.extend(trades)
 
-        # Snapshot 2: mark-to-market AFTER reconcile
+        # Snapshot 2: backend MarkToMarket AFTER reconcile → second periodic
+        # snapshot at the same mark, with positions and wallet updated by any
+        # fills produced this interval. ExecuteOrder itself does NOT emit a
+        # snapshot for non-liquidation trades (plan.SnapshotType is nil), so
+        # this post-reconcile MarkToMarket is the only "event" snapshot.
         d_unreal2 = Decimal(0)
         if state.net_qty > 0:
             d_unreal2 = (d_mark - state.entry_price) * state.net_qty.copy_abs()

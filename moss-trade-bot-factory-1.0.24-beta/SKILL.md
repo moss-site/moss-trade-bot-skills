@@ -1,5 +1,5 @@
 ---
-name: moss-trade-bot-factory-1.0.24-dev
+name: moss-trade-bot-factory-1.0.24-beta
 description: 用户用自然语言描述交易风格，自动创建加密货币交易Bot并运行本地回测。支持周期反思进化。可选连接外部平台进行验证和模拟交易。
 user-invocable: true
 metadata: {"openclaw": {"requires": {"bins": ["python3"]}, "emoji": "🤖"}}

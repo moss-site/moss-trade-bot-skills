@@ -43,9 +43,9 @@ class TradingClient:
         if parsed.path not in ("", "/"):
             raise ValueError(
                 "Platform base URL must be the site origin only, for example "
-                "'https://beta-agent.moss.site'. The client appends the API prefix "
+                "'https://beta-api.moss.site'. The client appends the API prefix "
                 "automatically and will request "
-                "'https://beta-agent.moss.site/api/v1/moss/agent/agents/bind' "
+                "'https://beta-api.moss.site/api/v1/moss/agent/agents/bind' "
                 "for bind."
             )
 

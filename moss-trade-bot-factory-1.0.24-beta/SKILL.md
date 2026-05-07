@@ -41,7 +41,7 @@ metadata: {"openclaw": {"requires": {"bins": ["python3"]}, "emoji": "🤖"}}
 自动推断（从用户描述中判断，不要追问）：
 - **交易品种**：从用户描述中提取。"交易ETH"→`ETH/USDC`，"做空SOL"→`SOL/USDC`，未提及具体币种→默认 `BTC/USDC`。本 skill 全流程统一使用 USDC 永续报价（与 Hyperliquid 后端、平台 API 一致）
   - 用户模糊说"主流币" → 默认 `ETH/USDC`
-  - **能否本地回测不由平台接口决定，只看本地是否有对应 CSV**（BTC 已内置；其他币种需用户提供 CSV），具体分支见下方「回测数据选择」
+  - **能否本地回测不由平台接口决定，只看本地是否有对应 CSV**。`scripts/data_cache/` 已内置 19 个主流 USDC 永续 148 天 15m 数据集（BTC、ETH、SOL、BNB、DOGE、APT、ATOM、AVAX、BCH、DOT、FIL、HBAR、LINK、LTC、NEAR、OP、SUI、TRX、UNI），回测前先看 `data_cache/` 是否已有对应 CSV；不在该 19 个之内（如 XRP / ADA / ARB 等 backend 也支持但本仓库未内置的 symbol）需用户自行提供 CSV。具体分支见下方「回测数据选择」
   - 平台是否支持某 alt 币种（用于 Step 4 上传 / Step 5 实盘）由平台接口实时返回决定，在 Step 4/5 时由 `package_upload.py` / `live_trade.py` 按平台错误响应处理，Step 1 不预先查询
 - 方向：趋势跟随→双向(0.5)，做空/逆势→偏空(0.1~0.3)，保守/定投→偏多(0.6~0.8)
 - 杠杆：保守→3~5x，中性→8~12x，激进→15~25x，梭哈→25~40x。**最终值必须 ≤ 该 symbol 的 Hyperliquid 上限** —— 写参数前先读 `cat {baseDir}/knowledge/leverage_caps.md` 查表，超限按上限封顶并在 Step 2 摘要里告知用户"已按上限 Nx 封顶"

@@ -68,9 +68,7 @@ COMPACT=$(echo "$SYMBOL" | tr -d '/:-' | tr '[:lower:]' '[:upper:]')
 DATA_CSV="{baseDir}/scripts/data_cache/hyperliquid_${COMPACT}_15m_2025-10-06_148d.csv"
 ```
 
-当前 `scripts/data_cache/` 内置的币种（22 个，与后端 `domain.AllSupportedRealtimeSymbols()` 同步）：BTC / ETH / SOL / BNB / APT / ATOM / AVAX / BCH / DOGE / DOT / FIL / HBAR / LINK / LTC / NEAR / OP / SUI / TRX / UNI / XRP / ADA / ARB。文件命名格式固定为 `hyperliquid_{COMPACT}USDC_15m_2025-10-06_148d.csv`（全部 USDC 永续）。
-
-新币种由维护者在仓库里把同命名格式 CSV 放进该目录，这里的映射就自动生效，**不要**再改 SKILL.md 硬编码分支；运行时不接受用户传入外部 CSV。
+当前 `scripts/data_cache/` 内置的币种（22 个，与后端 `domain.AllSupportedRealtimeSymbols()` 同步）：BTC / ETH / SOL / BNB / APT / ATOM / AVAX / BCH / DOGE / DOT / FIL / HBAR / LINK / LTC / NEAR / OP / SUI / TRX / UNI / XRP / ADA / ARB。文件命名格式固定为 `hyperliquid_{COMPACT}USDC_15m_2025-10-06_148d.csv`（全部 USDC 永续）。**运行时不接受用户传入外部 CSV**。
 
 > **平台端支持范围**：本 skill 支持的回测/创建币种 = data_cache 目录里实际有 CSV 的 22 币种（与后端 `domain.AllSupportedRealtimeSymbols()` 同步）。22 币之外的 symbol 即使 backend 未来支持，本 skill 也不会代用户跑回测；Step 1 应直接引导用户从这 22 币里选。
 

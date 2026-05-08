@@ -41,7 +41,7 @@ metadata: {"openclaw": {"requires": {"bins": ["python3"]}, "emoji": "🤖"}}
 自动推断（从用户描述中判断，不要追问）：
 - **交易品种**：从用户描述中提取。"交易ETH"→`ETH/USDC`，"做空SOL"→`SOL/USDC`，未提及具体币种→默认 `BTC/USDC`。本 skill 全流程统一使用 USDC 永续报价（与 Hyperliquid 后端、平台 API 一致）
   - 用户模糊说"主流币" → 默认 `ETH/USDC`
-  - **能否本地回测不由平台接口决定，只看本地是否有对应 CSV**。`scripts/data_cache/` 已内置 22 个 USDC 永续 148 天 15m 数据集（BTC、ETH、SOL、BNB、DOGE、APT、ATOM、AVAX、BCH、DOT、FIL、HBAR、LINK、LTC、NEAR、OP、SUI、TRX、UNI、XRP、ADA、ARB），与后端 `domain.AllSupportedRealtimeSymbols()` 同步覆盖；回测前先看 `data_cache/` 是否已有对应 CSV；当前 22 币之外的 symbol 需用户自行提供 CSV。具体分支见下方「回测数据选择」
+  - **能否本地回测只看 `scripts/data_cache/` 是否有对应 CSV**。本 skill 已内置 22 个 USDC 永续 148 天 15m 数据集（BTC、ETH、SOL、BNB、DOGE、APT、ATOM、AVAX、BCH、DOT、FIL、HBAR、LINK、LTC、NEAR、OP、SUI、TRX、UNI、XRP、ADA、ARB），与后端 `domain.AllSupportedRealtimeSymbols()` 同步覆盖。22 币之外的 symbol 本 skill **不支持本地回测、不支持用户自行提供 CSV**——Step 1 应直接引导用户从这 22 币里重选。具体分支见下方「回测数据选择」
   - 平台是否支持某 alt 币种（用于 Step 4 上传 / Step 5 实盘）由平台接口实时返回决定，在 Step 4/5 时由 `package_upload.py` / `live_trade.py` 按平台错误响应处理，Step 1 不预先查询
 - 方向：趋势跟随→双向(0.5)，做空/逆势→偏空(0.1~0.3)，保守/定投→偏多(0.6~0.8)
 - 杠杆：保守→3~5x，中性→8~12x，激进→15~25x，梭哈→25~40x。**最终值必须 ≤ 该 symbol 的 Hyperliquid 上限** —— 写参数前先读 `cat {baseDir}/knowledge/leverage_caps.md` 查表，超限按上限封顶并在 Step 2 摘要里告知用户"已按上限 Nx 封顶"
@@ -68,16 +68,13 @@ COMPACT=$(echo "$SYMBOL" | tr -d '/:-' | tr '[:lower:]' '[:upper:]')
 DATA_CSV="{baseDir}/scripts/data_cache/hyperliquid_${COMPACT}_15m_2025-10-06_148d.csv"
 ```
 
-当前 `scripts/data_cache/` 内置的币种（19 个）：BTC / ETH / SOL / BNB / APT / ATOM / AVAX / BCH / DOGE / DOT / FIL / HBAR / LINK / LTC / NEAR / OP / SUI / TRX / UNI。文件命名格式固定为 `hyperliquid_{COMPACT}USDC_15m_2025-10-06_148d.csv`（全部 USDC 永续）。
+当前 `scripts/data_cache/` 内置的币种（22 个，与后端 `domain.AllSupportedRealtimeSymbols()` 同步）：BTC / ETH / SOL / BNB / APT / ATOM / AVAX / BCH / DOGE / DOT / FIL / HBAR / LINK / LTC / NEAR / OP / SUI / TRX / UNI / XRP / ADA / ARB。文件命名格式固定为 `hyperliquid_{COMPACT}USDC_15m_2025-10-06_148d.csv`（全部 USDC 永续）。
 
-新币种只要未来把同命名格式 CSV 放进该目录，这里的映射就自动生效，**不要**再改 SKILL.md 硬编码分支。
+新币种由维护者在仓库里把同命名格式 CSV 放进该目录，这里的映射就自动生效，**不要**再改 SKILL.md 硬编码分支；运行时不接受用户传入外部 CSV。
 
-> **平台端支持范围**：本地回测和平台 verify / create-bot 当前都覆盖这 19 个币种（backend `SupportedMajors` 与本目录 dataset 同步）。XRP / ADA / ARB 在 backend 已注释待启用，需要时联系 ops 同步上 dataset CSV 后再开。表外的其他 alt 由平台错误响应判定，Step 1 不预查。
+> **平台端支持范围**：本 skill 支持的回测/创建币种 = data_cache 目录里实际有 CSV 的 22 币种（与后端 `domain.AllSupportedRealtimeSymbols()` 同步）。22 币之外的 symbol 即使 backend 未来支持，本 skill 也不会代用户跑回测；Step 1 应直接引导用户从这 22 币里选。
 
-若 `DATA_CSV` 不存在（上面列表外的 alt），按下列 fallback 处理，**不要**用已有币种的 CSV 给其他币种打指纹（会导致 symbol/数据错配）：
-
-1. 用户明确提供本地 OHLCV CSV 路径（含 `timestamp/open/high/low/close/volume` 列） → 把该路径设成 `DATA_CSV`
-2. 用户没有 CSV → **直接跳过本地回测**，告知用户 "本地未内置 ${SYMBOL} 的预置数据。跳过本地回测后，Step 4 上传验证因为缺 fingerprint/result 无法进行；仅能走 Step 5 直接创建 realtime bot（由平台接口按 symbol 实际支持情况返回结果）。或请把对应 15m、2025-10-06 起 148 天的 CSV 放到 `{baseDir}/scripts/data_cache/hyperliquid_${COMPACT}_15m_2025-10-06_148d.csv` 后重跑"，然后停下等待用户决定
+若 `DATA_CSV` 不存在（即用户选了 22 币之外的 symbol），**不要**用已有币种的 CSV 给其他币种打指纹（会导致 symbol/数据错配），也**不要**接受用户传入的外部 CSV 路径。直接告知用户「本 skill 仅支持以下 22 币种的本地回测：BTC / ETH / SOL / BNB / APT / ATOM / AVAX / BCH / DOGE / DOT / FIL / HBAR / LINK / LTC / NEAR / OP / SUI / TRX / UNI / XRP / ADA / ARB。请重新选择其中一个」，然后停下等待用户改 symbol。
 
 生成指纹（`<SYMBOL>` 即 Step 1 贯穿规则确定的值）：
 ```bash

@@ -43,8 +43,20 @@ evolution_log 每段包含：
 ### 性格参数永远不改
 long_bias, base_leverage, max_leverage, risk_per_trade, max_position_pct, rolling_*, 所有 signal_weight — 即使你在进化计划里改了，代码也会强制回滚。
 
-### 战术参数有漂移上限
-每个战术参数不能偏离初始值超过 ±30%。例如初始 entry_threshold=0.32，最多调到 0.22~0.42。代码会自动钳制。
+### 战术参数有漂移上限（**仅 float 字段**）
+每个**浮点型**战术参数不能偏离初始值超过 ±30%。例如初始 entry_threshold=0.32，最多调到 0.22~0.42。代码会自动钳制。
+
+漂移上限作用范围（`run_evolve_backtest.py` 的 `TACTICAL_FLOAT_FIELDS`）：
+- entry_threshold, exit_threshold
+- sl_atr_mult, tp_rr_ratio
+- trailing_activation_pct, trailing_distance_atr
+- regime_sensitivity, supertrend_mult, trend_strength_min
+
+**整数 / 布尔字段不受 ±30% 限制**（每轮可以跳变到 schema 全范围内任意合法值），包括：
+- exit_on_regime_change (bool)
+- fast_ma_period, slow_ma_period, rsi_period, rsi_overbought, rsi_oversold (int)
+
+但所有字段仍受 `params_schema.json` 的 min/max 绝对上下界约束。
 
 ### 允许调整的参数
 entry_threshold, exit_threshold, sl_atr_mult, tp_rr_ratio, trailing_activation_pct, trailing_distance_atr, regime_sensitivity, exit_on_regime_change, supertrend_mult, trend_strength_min, fast_ma_period, slow_ma_period, rsi_period, rsi_overbought, rsi_oversold

@@ -24,7 +24,7 @@
 | 参数 | 范围 | 含义 |
 |------|------|------|
 | entry_threshold | 0.05~0.55 | 越低越容易触发。0.15=激进, 0.25=中性, 0.40=保守, >0.5几乎不触发 |
-| exit_threshold | 0.03~0.30 | 持仓时反向信号超此值平仓 |
+| exit_threshold | 0.05~0.40 | 持仓时反向信号超此值平仓 |
 
 ## 方向偏好
 
@@ -36,15 +36,15 @@
 
 | 参数 | 范围 | 含义 |
 |------|------|------|
-| fast_ma_period | 5~50 | 快速均线周期 |
+| fast_ma_period | 3~50 | 快速均线周期 |
 | slow_ma_period | 20~200 | 慢速均线周期（必须 > fast_ma_period） |
 | trend_strength_min | 10~50 | ADX趋势强度阈值 |
 | supertrend_mult | 1~5 | Supertrend 倍数 |
-| rsi_period | 7~28 | RSI 周期 |
-| rsi_overbought | 60~85 | RSI 超买线 |
-| rsi_oversold | 15~40 | RSI 超卖线 |
+| rsi_period | 5~30 | RSI 周期 |
+| rsi_overbought | 60~90 | RSI 超买线 |
+| rsi_oversold | 10~40 | RSI 超卖线 |
 | bb_period | 10~50 | 布林带周期 |
-| bb_std | 1.0~3.0 | 布林带标准差倍数 |
+| bb_std | 1.0~4.0 | 布林带标准差倍数 |
 
 ## 杠杆与仓位
 
@@ -74,8 +74,8 @@
 | sl_atr_mult | 0.5~5.0 | 止损距离 = X × ATR。**高杠杆必须配宽止损** |
 | tp_rr_ratio | 1.0~10.0 | 止盈/止损距离比（风险回报比） |
 | trailing_enabled | bool | 是否启用移动止损 |
-| trailing_activation_pct | 0.01~0.10 | 浮盈X%后激活移动止损 |
-| trailing_distance_atr | 0.5~3.0 | 移动止损距最高点 X × ATR |
+| trailing_activation_pct | 0.01~0.20 | 浮盈X%后激活移动止损 |
+| trailing_distance_atr | 0.5~5.0 | 移动止损距最高点 X × ATR |
 
 ## 滚仓（趋势策略利润放大器）
 
@@ -84,9 +84,9 @@
 | 参数 | 范围 | 含义 |
 |------|------|------|
 | rolling_enabled | bool | 是否启用滚仓（用浮盈加仓） |
-| rolling_trigger_pct | 0.10~0.80 | 浮盈X%时触发 |
-| rolling_reinvest_pct | 0.30~1.0 | 用浮盈的X%作为新仓保证金 |
-| rolling_max_times | 1~5 | 最多滚仓次数 |
+| rolling_trigger_pct | 0.10~1.0 | 浮盈X%时触发 |
+| rolling_reinvest_pct | 0.10~1.0 | 用浮盈的X%作为新仓保证金 |
+| rolling_max_times | 1~10 | 最多滚仓次数 |
 | rolling_move_stop | bool | 滚仓后老仓止损移到成本价 |
 
 ## Regime 敏感度

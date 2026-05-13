@@ -16,6 +16,8 @@ if SCRIPTS not in sys.path:
     sys.path.insert(0, SCRIPTS)
 
 from core.leverage_caps import cap_params_for_symbol, max_leverage_for_symbol
+from core.backtest import _aggregate_trades_backend_style, _apply_backend_style_trade_metrics
+from core.engine import BacktestResult
 from core.replay_baseline import (
     FIXED_REPLAY_FUNDING_RATE,
     FIXED_REPLAY_LOT_SIZE,
@@ -117,6 +119,37 @@ class LeverageCapsTest(unittest.TestCase):
         op = cap_params_for_symbol({"base_leverage": 10.0, "max_leverage": 40.0}, "OPUSDC")
         self.assertEqual(op["base_leverage"], 5.0)
         self.assertEqual(op["max_leverage"], 5.0)
+
+
+class BackendStyleTradeMetricTest(unittest.TestCase):
+    def test_fill_aggregation_counts_closed_lifecycles_not_partial_reductions(self):
+        fills = [
+            {"side": "buy", "qty": 10.0, "price": 1.0},
+            {"side": "sell", "qty": 4.0, "price": 1.1},
+            {"side": "sell", "qty": 6.0, "price": 0.9},
+            {"side": "sell", "qty": 5.0, "price": 0.8},
+            {"side": "buy", "qty": 6.0, "price": 0.7},
+        ]
+
+        agg = _aggregate_trades_backend_style(fills)
+
+        self.assertEqual(agg["total_trades"], 2)
+        self.assertEqual(agg["wins"], 1)
+        self.assertAlmostEqual(agg["win_rate"], 0.5, places=12)
+        self.assertAlmostEqual(agg["profit_factor"], 2.5, places=12)
+
+    def test_result_metrics_are_overridden_with_backend_fill_aggregation(self):
+        result = BacktestResult(total_trades=5, win_rate=1.0, profit_factor=99.0)
+        fills = [
+            {"side": "buy", "qty": 1.0, "price": 100.0},
+            {"side": "sell", "qty": 1.0, "price": 90.0},
+        ]
+
+        _apply_backend_style_trade_metrics(result, fills)
+
+        self.assertEqual(result.total_trades, 1)
+        self.assertEqual(result.win_rate, 0.0)
+        self.assertEqual(result.profit_factor, 0.0)
 
 
 class BuildFixedReplayDepthBookTest(unittest.TestCase):

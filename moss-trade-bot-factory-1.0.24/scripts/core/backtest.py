@@ -496,6 +496,136 @@ def _reconcile_position(state, open_trade, desired, *, mark_price, fee_rate, fil
 # Public entry point
 # ---------------------------------------------------------------------------
 
+def _aggregate_trades_backend_style(fills: list) -> dict:
+    """Replay backend's AggregateRealtimeSourceTradeAggFromFillRows over fills."""
+    ZERO = Decimal(0)
+    # Python fills are float-derived; zero sub-tolerance residuals so exact
+    # closes line up with the replay account state used while producing fills.
+    tol = Decimal("1e-10")
+    net_qty = ZERO
+    entry_price = ZERO
+    open_side = ""
+    accum_realized = ZERO
+    total_trades = 0
+    wins = 0
+    long_total = 0
+    short_total = 0
+    long_wins = 0
+    short_wins = 0
+    gross_profit = ZERO
+    gross_loss = ZERO
+    liquidation_count = 0
+
+    def apply_completed_trade(side: str, realized: Decimal):
+        nonlocal total_trades, wins, long_total, short_total, long_wins, short_wins, gross_profit, gross_loss
+        total_trades += 1
+        if side == "buy":
+            long_total += 1
+            if realized > ZERO:
+                long_wins += 1
+        elif side == "sell":
+            short_total += 1
+            if realized > ZERO:
+                short_wins += 1
+        if realized > ZERO:
+            wins += 1
+            gross_profit += realized
+        elif realized < ZERO:
+            gross_loss += -realized
+
+    for fill in fills:
+        side = fill["side"]
+        qty = _D(fill["qty"])
+        price = _D(fill["price"])
+        if qty <= ZERO or price <= ZERO:
+            continue
+        if fill.get("is_liquidation"):
+            liquidation_count += 1
+
+        trade_sign = 1 if side == "buy" else -1
+        trade_signed_qty = Decimal(trade_sign) * qty
+        current_sign = 1 if net_qty > ZERO else (-1 if net_qty < ZERO else 0)
+        prev_open_side = open_side
+
+        if current_sign == 0 or current_sign == trade_sign:
+            old_abs = abs(net_qty)
+            total_abs = old_abs + qty
+            if old_abs <= ZERO:
+                entry_price = price
+            elif total_abs > ZERO:
+                entry_price = (entry_price * old_abs + price * qty) / total_abs
+            net_qty += trade_signed_qty
+            realized = ZERO
+        elif abs(net_qty) > qty + tol:
+            realized = (price - entry_price) * qty if net_qty > ZERO else (entry_price - price) * qty
+            net_qty += trade_signed_qty
+        elif abs(abs(net_qty) - qty) <= tol:
+            realized = (price - entry_price) * qty if net_qty > ZERO else (entry_price - price) * qty
+            net_qty = ZERO
+            entry_price = ZERO
+        else:
+            closed_qty = abs(net_qty)
+            realized = (price - entry_price) * closed_qty if net_qty > ZERO else (entry_price - price) * closed_qty
+            remainder = qty - closed_qty
+            net_qty = Decimal(trade_sign) * remainder
+            entry_price = price
+
+        if abs(net_qty) <= tol:
+            net_qty = ZERO
+            entry_price = ZERO
+        next_sign = 1 if net_qty > ZERO else (-1 if net_qty < ZERO else 0)
+
+        if current_sign == 0:
+            if next_sign != 0:
+                open_side = side
+                accum_realized = ZERO
+        elif next_sign == 0:
+            accum_realized += realized
+            apply_completed_trade(prev_open_side, accum_realized)
+            open_side = ""
+            accum_realized = ZERO
+        elif current_sign != next_sign:
+            accum_realized += realized
+            apply_completed_trade(prev_open_side, accum_realized)
+            open_side = side
+            accum_realized = ZERO
+        else:
+            accum_realized += realized
+
+    if gross_loss == ZERO and gross_profit > ZERO:
+        profit_factor = REPLAY_ALIGNED_PROFIT_FACTOR_CAP
+    elif gross_loss == ZERO:
+        profit_factor = 0.0
+    else:
+        profit_factor = float(gross_profit / gross_loss)
+
+    return {
+        "total_trades": total_trades,
+        "wins": wins,
+        "win_rate": wins / total_trades if total_trades > 0 else 0.0,
+        "profit_factor": profit_factor,
+        "gross_profit": float(gross_profit),
+        "gross_loss": float(gross_loss),
+        "long_total": long_total,
+        "short_total": short_total,
+        "long_wins": long_wins,
+        "short_wins": short_wins,
+        "liquidation_count": liquidation_count,
+    }
+
+
+def _apply_backend_style_trade_metrics(result: BacktestResult, fills: list) -> BacktestResult:
+    agg = _aggregate_trades_backend_style(fills)
+    result.total_trades = agg["total_trades"]
+    result.win_rate = agg["win_rate"]
+    result.profit_factor = agg["profit_factor"]
+    result.long_trade_count = agg["long_total"]
+    result.short_trade_count = agg["short_total"]
+    result.gross_profit_pnl = agg["gross_profit"]
+    result.gross_loss_pnl = -agg["gross_loss"]
+    result.liquidation_count = agg["liquidation_count"]
+    return result
+
 def run_backtest(
     df: pd.DataFrame,
     params: DecisionParams,
@@ -669,7 +799,7 @@ def run_backtest(
         open_positions=open_positions, fill_count=state.fill_count,
     )
     result.fills = list(state.fills)
-    return result
+    return _apply_backend_style_trade_metrics(result, result.fills)
 
 
 # ---------------------------------------------------------------------------

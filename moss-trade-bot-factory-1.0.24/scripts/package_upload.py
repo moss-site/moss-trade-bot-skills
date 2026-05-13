@@ -41,6 +41,7 @@ if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
 from core.decision import DecisionParams
+from core.leverage_caps import cap_params_for_symbol
 from text_i18n import default_text, validate_bilingual_text
 
 PLATFORM_URL_HELP = "Platform site origin only, e.g. https://ai.moss.site. The client appends API paths automatically."
@@ -49,12 +50,15 @@ PLATFORM_URL_HELP = "Platform site origin only, e.g. https://ai.moss.site. The c
 # 可通过 --exchange 覆盖。
 
 
-def _materialize_params(raw_params):
+def _materialize_params(raw_params, symbol=None):
     raw_params = raw_params or {}
     if not isinstance(raw_params, dict):
-        return DecisionParams().to_dict()
+        raw_params = DecisionParams().to_dict()
     clean = {k: v for k, v in raw_params.items() if v is not None}
+    clean = cap_params_for_symbol(clean, symbol)
     return DecisionParams.from_dict(clean).to_dict()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Package upload bundle")
     parser.add_argument("--bot-name", default="")
@@ -102,7 +106,7 @@ def main():
     if args.evolution_config:
         evolution_config = json.loads(args.evolution_config)
 
-    params = _materialize_params(params)
+    params = _materialize_params(params, fingerprint.get("symbol"))
 
     def _to_rfc3339(ts: str) -> str:
         if not ts:
@@ -135,7 +139,7 @@ def main():
                 continue
             item = dict(entry)
             if isinstance(item.get("params_used"), dict):
-                item["params_used"] = _materialize_params(item["params_used"])
+                item["params_used"] = _materialize_params(item["params_used"], fingerprint.get("symbol"))
             time_range = item.get("time_range")
             if isinstance(time_range, list):
                 item["time_range"] = [_to_rfc3339(v) for v in time_range[:2]]

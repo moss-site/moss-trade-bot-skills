@@ -25,9 +25,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pandas as pd
 import numpy as np
 from core.decision import DecisionParams, compute_signals
+from core.leverage_caps import cap_params_for_symbol
 from core.regime import classify_regime
 from core.backtest import run_backtest, _build_result
 from core.indicators import atr as compute_atr
+from core.replay_baseline import infer_replay_symbol_from_path
 
 
 PERSONALITY_FIELDS = [
@@ -260,6 +262,8 @@ def main():
 
     df = pd.read_csv(args.data, parse_dates=["timestamp"])
     regime = classify_regime(df, version=args.regime_version)
+    symbol = infer_replay_symbol_from_path(args.data)
+    initial_params = cap_params_for_symbol(initial_params, symbol)
 
     total_bars = len(df)
     n_segments = max(1, total_bars // args.segment_bars)
@@ -280,7 +284,7 @@ def main():
             evo_params = evolution_schedule[seg_idx].get("params", current_params_track)
             evo_params = lock_personality(evo_params, initial_params)
             evo_params = clamp_tactical_drift(evo_params, initial_params)
-            current_params_track = resolve_params_dict(evo_params)
+            current_params_track = cap_params_for_symbol(resolve_params_dict(evo_params), symbol)
         seg_params = copy.deepcopy(current_params_track)
         # seg0 start skips CSV first bar (backend clamps to scoredStart = iloc[0] + step anyway).
         start_iloc = seg_start if seg_start > 0 else 1
@@ -308,6 +312,7 @@ def main():
             initial_capital=args.capital,
             window_start=window_start,
             window_end=window_end,
+            symbol=symbol,
         )
         seg_results.append(seg_res)
 

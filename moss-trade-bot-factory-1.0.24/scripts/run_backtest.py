@@ -15,8 +15,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd
 from core.decision import DecisionParams
+from core.leverage_caps import cap_params_for_symbol
 from core.regime import classify_regime
 from core.backtest import run_backtest
+from core.replay_baseline import infer_replay_symbol_from_path
 
 
 def main():
@@ -40,8 +42,14 @@ def main():
 
     df = pd.read_csv(args.data, parse_dates=["timestamp"])
     regime = classify_regime(df, version=args.regime_version)
+    symbol = infer_replay_symbol_from_path(args.data)
+    params_dict = cap_params_for_symbol(params_dict, symbol)
     params = DecisionParams.from_dict(params_dict)
-    result = run_backtest(df, params, regime, initial_capital=args.capital)
+    result = run_backtest(
+        df, params, regime,
+        initial_capital=args.capital,
+        symbol=symbol,
+    )
 
     trades_list = []
     for t in result.trades:

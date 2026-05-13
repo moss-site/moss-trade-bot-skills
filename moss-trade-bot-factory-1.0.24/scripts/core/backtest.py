@@ -70,8 +70,8 @@ def _search_left_timestamp(timestamps: pd.DatetimeIndex, ts: pd.Timestamp) -> in
     return int(timestamps.searchsorted(target, side="left"))
 
 
-def _replay_reference_price(direction: int, mark_price: float) -> float:
-    book = build_fixed_replay_depth_book(mark_price)
+def _replay_reference_price(direction: int, mark_price: float, symbol: Optional[str] = None) -> float:
+    book = build_fixed_replay_depth_book(mark_price, symbol)
     if direction > 0 and book["asks"]:
         return float(book["asks"][0][0])
     if direction < 0 and book["bids"]:
@@ -435,18 +435,18 @@ def _apply_fill(state, open_trade, *, side, qty, fill_price, requested_leverage,
     return open_trade, completed
 
 
-def _reconcile_position(state, open_trade, desired, *, mark_price, fee_rate, fill_idx, fill_time, df):
+def _reconcile_position(state, open_trade, desired, *, mark_price, fee_rate, fill_idx, fill_time, df, symbol: str = "BTC"):
     completed = []
     current_side = "long" if state.net_qty > 0 else ("short" if state.net_qty < 0 else None)
 
     # Go flat
     if desired.side is None or desired.target_notional < Decimal(1):
         if current_side == "long":
-            fp, fq, _ = simulate_replay_baseline_fill(-1, float(state.net_qty.copy_abs()), mark_price)
+            fp, fq, _ = simulate_replay_baseline_fill(-1, float(state.net_qty.copy_abs()), mark_price, symbol)
             open_trade, trades = _apply_fill(state, open_trade, side="sell", qty=fq, fill_price=fp, requested_leverage=state.leverage, fee_rate=fee_rate, fill_idx=fill_idx, fill_time=fill_time, action="close_long", df=df)
             completed.extend(trades)
         elif current_side == "short":
-            fp, fq, _ = simulate_replay_baseline_fill(1, float(state.net_qty.copy_abs()), mark_price)
+            fp, fq, _ = simulate_replay_baseline_fill(1, float(state.net_qty.copy_abs()), mark_price, symbol)
             open_trade, trades = _apply_fill(state, open_trade, side="buy", qty=fq, fill_price=fp, requested_leverage=state.leverage, fee_rate=fee_rate, fill_idx=fill_idx, fill_time=fill_time, action="close_short", df=df)
             completed.extend(trades)
         return open_trade, completed
@@ -456,7 +456,7 @@ def _reconcile_position(state, open_trade, desired, *, mark_price, fee_rate, fil
         close_dir = -1 if current_side == "long" else 1
         close_side = "sell" if current_side == "long" else "buy"
         action = "flip_close_long" if current_side == "long" else "flip_close_short"
-        fp, fq, _ = simulate_replay_baseline_fill(close_dir, float(state.net_qty.copy_abs()), mark_price)
+        fp, fq, _ = simulate_replay_baseline_fill(close_dir, float(state.net_qty.copy_abs()), mark_price, symbol)
         open_trade, trades = _apply_fill(state, open_trade, side=close_side, qty=fq, fill_price=fp, requested_leverage=state.leverage, fee_rate=fee_rate, fill_idx=fill_idx, fill_time=fill_time, action=action, df=df)
         completed.extend(trades)
 
@@ -474,18 +474,18 @@ def _reconcile_position(state, open_trade, desired, *, mark_price, fee_rate, fil
     if d_diff > 0:
         direction = 1 if desired.side == "long" else -1
         side = "buy" if direction > 0 else "sell"
-        ref_price = _replay_reference_price(direction, mark_price)
+        ref_price = _replay_reference_price(direction, mark_price, symbol)
         qty = float(d_diff / _D(ref_price)) if ref_price > 0 else 0.0
-        fp, fq, _ = simulate_replay_baseline_fill(direction, qty, mark_price)
+        fp, fq, _ = simulate_replay_baseline_fill(direction, qty, mark_price, symbol)
         open_trade, trades = _apply_fill(state, open_trade, side=side, qty=fq, fill_price=fp, requested_leverage=desired.leverage, fee_rate=fee_rate, fill_idx=fill_idx, fill_time=fill_time, action=f"increase_{desired.side}", df=df)
         completed.extend(trades)
     elif state.net_qty != 0:
         direction = -1 if desired.side == "long" else 1
-        ref_price = _replay_reference_price(direction, mark_price)
+        ref_price = _replay_reference_price(direction, mark_price, symbol)
         close_qty = min(abs(state.net_qty), float(d_diff.copy_abs() / _D(ref_price)) if ref_price > 0 else 0.0)
         if close_qty > 0:
             side = "sell" if desired.side == "long" else "buy"
-            fp, fq, _ = simulate_replay_baseline_fill(direction, close_qty, mark_price)
+            fp, fq, _ = simulate_replay_baseline_fill(direction, close_qty, mark_price, symbol)
             open_trade, trades = _apply_fill(state, open_trade, side=side, qty=fq, fill_price=fp, requested_leverage=state.leverage, fee_rate=fee_rate, fill_idx=fill_idx, fill_time=fill_time, action=f"reduce_{desired.side}", df=df)
             completed.extend(trades)
 
@@ -508,6 +508,7 @@ def run_backtest(
     window_start: pd.Timestamp = None,
     window_end: pd.Timestamp = None,
     close_open_positions_at_end: bool = False,
+    symbol: str = "BTC",
 ) -> BacktestResult:
     """Replay-aligned two-layer backtest matching Go verify.
 
@@ -612,7 +613,7 @@ def run_backtest(
         open_trade, trades = _reconcile_position(
             state, open_trade, desired,
             mark_price=mark_price, fee_rate=fee_rate,
-            fill_idx=mark_bar_idx, fill_time=fill_time, df=df,
+            fill_idx=mark_bar_idx, fill_time=fill_time, df=df, symbol=symbol,
         )
         completed_trades.extend(trades)
 
@@ -639,7 +640,7 @@ def run_backtest(
         if close_open_positions_at_end:
             close_dir = -1 if state.net_qty > 0 else 1
             close_side = "sell" if state.net_qty > 0 else "buy"
-            fp, fq, _ = simulate_replay_baseline_fill(close_dir, float(state.net_qty.copy_abs()), last_mark)
+            fp, fq, _ = simulate_replay_baseline_fill(close_dir, float(state.net_qty.copy_abs()), last_mark, symbol)
             open_trade, trades = _apply_fill(state, open_trade, side=close_side, qty=fq, fill_price=fp,
                                              requested_leverage=state.leverage, fee_rate=fee_rate,
                                              fill_idx=last_idx, fill_time=last_time, action="end_of_data", df=df)

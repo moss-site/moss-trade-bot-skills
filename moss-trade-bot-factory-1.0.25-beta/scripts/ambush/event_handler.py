@@ -19,11 +19,23 @@ Decision logic lives in `decision.py` (1:1 port of Go
     → record_decision(decision, reason, order_id?, order_status, error?)
     → advance last_event_id_seen cursor
 
-Single-position lock is enforced server-side via the `active_symbol`
-column on the bot row (see `MaybeUpdateAmbushActiveSymbol` /
-`MaybeClearAmbushActiveSymbolOnFlat`). The skill optimistically sends
-the order; the server returns 423 LOCKED if another symbol is held,
-which we record as `order_status='rejected'` and move on.
+Single-position lock is enforced in two layers:
+
+1. Server side, atomically: `enforceAmbushPositionLock` against
+   `agent_trade_realtime_bot_configs.active_symbol` (set/cleared by
+   `MaybeUpdateAmbushActiveSymbol` / `MaybeClearAmbushActiveSymbolOnFlat`
+   in the same DB transaction as the fill). This is the source of truth
+   and cannot race — a second-symbol order is rejected with
+   `single_position_lock` even if it arrives mid-fill.
+
+2. Skill side (this file), as a pre-check: before submitting the
+   open order, list the bot's current positions and if any non-zero
+   net_qty exists on a different base asset, record the decision as
+   `single_position_lock` and skip. This avoids round-tripping a
+   reject through the order endpoint when we already know the bot is
+   locked. Stale reads (the position closes between the check and the
+   order POST) still hit the server-side atomic lock, so a stale skip
+   does not allow an invalid order through.
 """
 
 from __future__ import annotations
@@ -282,7 +294,49 @@ def process_event(
         # for HL symbols (e.g. "PEPE" → "PEPEUSDC"). hl_symbol on the
         # event envelope is already uppercase base; build the perp.
         prev_symbol = handler.client.symbol
-        handler.client.symbol = sym if sym.endswith("USDC") else f"{sym}USDC"
+        target_symbol = sym if sym.endswith("USDC") else f"{sym}USDC"
+        handler.client.symbol = target_symbol
+
+        # Single-position lock pre-check. The server enforces this
+        # atomically via active_symbol; we replicate the rule here so we
+        # don't blast an order we know will be rejected. List positions
+        # and skip if any non-dust position exists on a different base
+        # asset. A stale read is harmless — the server still rejects.
+        try:
+            existing_positions = handler.client.get_positions() or []
+        except Exception as e:
+            # Don't block the trade on a flaky read. Server-side lock
+            # still catches an invalid attempt.
+            logger.warning(
+                "ambush handler: pre-check get_positions failed for %s: %s",
+                _format_event_brief(event), e,
+            )
+            existing_positions = []
+        for pos in existing_positions:
+            raw_qty = pos.get("net_qty") if "net_qty" in pos else pos.get("size", "0")
+            try:
+                qty = Decimal(str(raw_qty or "0"))
+            except (InvalidOperation, ValueError):
+                continue
+            if qty == 0:
+                continue
+            held_sym = str(pos.get("symbol") or "").upper()
+            if not held_sym or held_sym == target_symbol:
+                continue
+            logger.info(
+                "ambush handler: %s decided %s/%s on %s but bot already holds %s qty=%s — skipping (single_position_lock pre-check)",
+                _format_event_brief(event), decision.side, decision.reason,
+                target_symbol, held_sym, qty,
+            )
+            db.record_decision(
+                db_path, event_id, decision.side, "single_position_lock",
+                order_status="rejected",
+                error_msg=f"already holding {held_sym} qty={qty}, cannot open {target_symbol}",
+            )
+            db.mark_event_synced(db_path, event_id)
+            db.set_last_event_id_seen(db_path, event_id)
+            handler.client.symbol = prev_symbol
+            return
 
         client_order_id = f"ambush-{event_id}-{int(time.time())}"
         reasoning_zh, reasoning_en = _build_reasoning(event, decision)

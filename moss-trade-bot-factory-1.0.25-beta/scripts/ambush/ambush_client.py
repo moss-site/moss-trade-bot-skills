@@ -39,29 +39,51 @@ class AmbushClient:
 
     # ── Event endpoints (HMAC auth) ────────────────────────────────────────
 
-    def get_bootstrap(self, since_event_id: int = 0) -> dict:
+    def get_bootstrap(
+        self, since_event_id: int = 0, since_exit_signal_id: int = 0,
+    ) -> dict:
         """GET /api/v2/moss/agent/realtime/bots/:bot_id/ambush-events/bootstrap.
 
         Returns: {
           "bot_id": str,
           "server_time": rfc3339,
-          "server_event_sequence": int,    # max ambush_event.id at query time
-          "watchlist_snapshot": [...],     # current observation set
-          "recent_events": [...]           # events with id > since (24h, ≤500)
+          "server_event_sequence":        int,   # max ambush_event.id at query time
+          "server_exit_signal_sequence":  int,   # max ambush_exit_signal.id at query time
+          "watchlist_snapshot":           [...], # current observation set
+          "recent_events":                [...], # detected events with id > since (24h, ≤500)
+          "recent_exit_signals":          [...], # exit signals with id > since_exit (24h, ≤500)
         }
+
+        `since_exit_signal_id` cursors the exit-signal stream independently
+        from the open-event cursor (they come from different sequences).
         """
         path = f"/agent/realtime/bots/{self._bot_id}/ambush-events/bootstrap"
-        query = {}
+        query: dict[str, str] = {}
         if since_event_id and since_event_id > 0:
             query["since"] = str(since_event_id)
+        if since_exit_signal_id and since_exit_signal_id > 0:
+            query["since_exit"] = str(since_exit_signal_id)
         return self._tc._request("GET", path, query=query)
 
     def get_events_since(
-        self, from_ts: str = "", since_event_id: int = 0, limit: int = 100
-    ) -> list[dict]:
-        """GET /agent/realtime/bots/:bot_id/ambush-events?from_ts=&since=&limit=.
+        self,
+        from_ts: str = "",
+        since_event_id: int = 0,
+        since_exit_signal_id: int = 0,
+        limit: int = 100,
+    ) -> dict:
+        """GET /agent/realtime/bots/:bot_id/ambush-events?from_ts=&since=&since_exit=&limit=.
 
-        Returns: list of envelope dicts ([] if none). Used by poller fallback.
+        Returns the parsed response dict:
+          {
+            "bot_id":            str,
+            "items":             [...]  # detected events
+            "exit_signal_items": [...]  # exit signals
+          }
+
+        The dict shape (vs. previous list-only return) is a small contract
+        widening — the poller is the only caller; it now reads both
+        streams.
         """
         path = f"/agent/realtime/bots/{self._bot_id}/ambush-events"
         query: dict[str, str] = {}
@@ -69,12 +91,17 @@ class AmbushClient:
             query["from_ts"] = from_ts
         if since_event_id and since_event_id > 0:
             query["since"] = str(since_event_id)
+        if since_exit_signal_id and since_exit_signal_id > 0:
+            query["since_exit"] = str(since_exit_signal_id)
         if limit and limit > 0:
             query["limit"] = str(limit)
         resp = self._tc._request("GET", path, query=query)
-        if isinstance(resp, dict):
-            return resp.get("items") or []
-        return []
+        if not isinstance(resp, dict):
+            return {"items": [], "exit_signal_items": []}
+        # Normalize missing keys so callers don't need to check.
+        resp.setdefault("items", [])
+        resp.setdefault("exit_signal_items", [])
+        return resp
 
     # ── WebSocket: URL + headers ───────────────────────────────────────────
 

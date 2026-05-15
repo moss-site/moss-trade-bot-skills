@@ -99,6 +99,25 @@ def init_db(db_path: str) -> None:
                 peak_price     TEXT NOT NULL,
                 last_seen_at   TEXT NOT NULL
             );
+
+            -- exit_signal_processed: audit log of platform exit signals the
+            -- skill has acted on. Keyed by the backend's ambush_exit_signal.id
+            -- (a separate ID space from ambush_event.id) so the WS bootstrap
+            -- replay + REST poller fallback can both dedupe via INSERT OR
+            -- IGNORE. action ∈ {'closed', 'no_position', 'failed'}; reason
+            -- carries the backend rule ('oi_revert' / 'max_hold') for audit.
+            CREATE TABLE IF NOT EXISTS exit_signal_processed (
+                exit_signal_id    INTEGER PRIMARY KEY,
+                opening_event_id  INTEGER NOT NULL,
+                hl_symbol         TEXT NOT NULL,
+                reason            TEXT NOT NULL,
+                received_at       TEXT NOT NULL,
+                action            TEXT NOT NULL,
+                order_id          TEXT,
+                error_msg         TEXT
+            );
+            CREATE INDEX IF NOT EXISTS ix_exit_signal_symbol
+              ON exit_signal_processed(hl_symbol, received_at);
             """
         )
 
@@ -210,6 +229,61 @@ def get_last_event_id_seen(db_path: str) -> int:
 
 def set_last_event_id_seen(db_path: str, event_id: int) -> None:
     set_state(db_path, "last_event_id_seen", str(event_id))
+
+
+def get_last_exit_signal_id_seen(db_path: str) -> int:
+    """Cursor for the platform exit-signal stream. Separate from
+    last_event_id_seen because ambush_event and ambush_exit_signal use
+    distinct ID sequences on the backend."""
+    raw = get_state(db_path, "last_exit_signal_id_seen", "0")
+    try:
+        return int(raw)
+    except ValueError:
+        return 0
+
+
+def set_last_exit_signal_id_seen(db_path: str, exit_signal_id: int) -> None:
+    set_state(db_path, "last_exit_signal_id_seen", str(exit_signal_id))
+
+
+# ───── exit_signal_processed ─────
+
+
+def is_exit_signal_processed(db_path: str, exit_signal_id: int) -> bool:
+    """True when we've already acted on this exit_signal_id. Skill uses
+    this to short-circuit WS bootstrap replay (server may re-deliver the
+    same signal after a disconnect)."""
+    with get_conn(db_path) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM exit_signal_processed WHERE exit_signal_id = ? LIMIT 1",
+            (exit_signal_id,),
+        ).fetchone()
+        return row is not None
+
+
+def record_exit_signal_processed(
+    db_path: str,
+    exit_signal_id: int,
+    opening_event_id: int,
+    hl_symbol: str,
+    reason: str,
+    action: str,
+    order_id: str | None = None,
+    error_msg: str | None = None,
+) -> None:
+    """Idempotent (INSERT OR IGNORE) — a second call for the same
+    exit_signal_id is a no-op. action ∈ {'closed','no_position','failed'}."""
+    with get_conn(db_path) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO exit_signal_processed "
+            "(exit_signal_id, opening_event_id, hl_symbol, reason, received_at, "
+            " action, order_id, error_msg) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                exit_signal_id, opening_event_id, hl_symbol, reason,
+                _now_iso(), action, order_id, error_msg,
+            ),
+        )
 
 
 # ───── position_state (close_monitor uses these) ─────

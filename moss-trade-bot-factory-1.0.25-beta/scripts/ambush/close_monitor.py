@@ -130,24 +130,38 @@ async def run_close_monitor(
     *,
     tick_seconds: int = DEFAULT_TICK_SECONDS,
 ) -> None:
-    """asyncio entry — runs until stop_event is set."""
+    """asyncio entry — runs until stop_event is set.
+
+    Wrapped in a top-level try/except so any unexpected raise out of the
+    inner await chain is surfaced loudly instead of being swallowed by
+    asyncio.gather(..., return_exceptions=True) in the runner.
+    """
     logger.info(
         "ambush close_monitor: started tick=%ds (skill owns trailing+max_hold; "
         "server owns stop_loss floor)",
         tick_seconds,
     )
-    while not stop_event.is_set():
-        try:
-            await asyncio.wait_for(stop_event.wait(), timeout=tick_seconds)
-            break
-        except asyncio.TimeoutError:
-            pass
-        try:
-            await asyncio.get_event_loop().run_in_executor(
-                None, _run_tick, client, db_path, ambush_params
-            )
-        except Exception as e:
-            logger.exception("ambush close_monitor: tick failed: %s", e)
+    tick_count = 0
+    heartbeat_every = max(1, int(60 / max(1, tick_seconds)))  # ~1/min
+    try:
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=tick_seconds)
+                break
+            except asyncio.TimeoutError:
+                pass
+            try:
+                await asyncio.get_event_loop().run_in_executor(
+                    None, _run_tick, client, db_path, ambush_params
+                )
+            except Exception as e:
+                logger.exception("ambush close_monitor: tick failed: %s", e)
+            tick_count += 1
+            if tick_count % heartbeat_every == 0:
+                logger.info("ambush close_monitor: heartbeat ticks=%d", tick_count)
+    except BaseException:
+        logger.exception("ambush close_monitor: fatal — coroutine exiting")
+        raise
     logger.info("ambush close_monitor: stopped")
 
 

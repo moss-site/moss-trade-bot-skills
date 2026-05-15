@@ -154,10 +154,21 @@ async def _main_async(args: argparse.Namespace) -> int:
         ),
         name="ambush-poll",
     )
+    # close_monitor owns trailing / max_hold exits. Server-side
+    # stop_loss watcher (engine/AmbushStopLossWatcher in cmd/server)
+    # is the hard floor; this task is the higher-level drift exit.
+    from ambush import close_monitor
+    close_task = asyncio.create_task(
+        close_monitor.run_close_monitor(
+            tc, db_path, ambush_params, stop_event,
+            tick_seconds=args.close_tick_seconds,
+        ),
+        name="ambush-close-monitor",
+    )
 
-    logger.info("ambush runner: started ws+poller, awaiting events")
+    logger.info("ambush runner: started ws+poller+close_monitor, awaiting events")
     try:
-        await asyncio.gather(ws_task, poll_task, return_exceptions=True)
+        await asyncio.gather(ws_task, poll_task, close_task, return_exceptions=True)
     finally:
         logger.info("ambush runner: stopped")
     return 0
@@ -181,6 +192,10 @@ def main() -> int:
     parser.add_argument(
         "--poll-interval", type=float, default=30.0,
         help="REST poller tick in seconds (default 30)",
+    )
+    parser.add_argument(
+        "--close-tick-seconds", type=int, default=30,
+        help="Close monitor tick in seconds (trailing/max_hold check; default 30)",
     )
     parser.add_argument(
         "--log-level", default="INFO",

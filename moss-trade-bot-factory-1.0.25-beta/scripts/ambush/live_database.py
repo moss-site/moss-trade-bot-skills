@@ -83,6 +83,22 @@ def init_db(db_path: str) -> None:
                 value       TEXT NOT NULL,
                 updated_at  TEXT NOT NULL
             );
+
+            -- position_state: per-open-position tracking for close_monitor's
+            -- trailing / max_hold rules. The server-side stop_loss watcher is
+            -- the hard floor; this table is the skill's own drift state
+            -- (peak ratchet + opened_at) that the server doesn't own. On
+            -- restart, the monitor bootstraps missing rows from the live
+            -- positions list so peak gets reset to current mark — never
+            -- closes prematurely, just loses the historical peak.
+            CREATE TABLE IF NOT EXISTS position_state (
+                symbol         TEXT PRIMARY KEY,
+                side           TEXT NOT NULL,
+                entry_price    TEXT NOT NULL,
+                opened_at      TEXT NOT NULL,
+                peak_price     TEXT NOT NULL,
+                last_seen_at   TEXT NOT NULL
+            );
             """
         )
 
@@ -194,3 +210,71 @@ def get_last_event_id_seen(db_path: str) -> int:
 
 def set_last_event_id_seen(db_path: str, event_id: int) -> None:
     set_state(db_path, "last_event_id_seen", str(event_id))
+
+
+# ───── position_state (close_monitor uses these) ─────
+
+
+def upsert_position_state(
+    db_path: str,
+    symbol: str,
+    side: str,
+    entry_price: str,
+    opened_at: str,
+    peak_price: str,
+) -> None:
+    """Insert a new active position. ON CONFLICT keeps the original
+    opened_at + entry_price (a re-open after partial flatten + reopen
+    on same symbol should be rare given single_position_lock; if it
+    happens, treat as continuation of the original position)."""
+    with get_conn(db_path) as conn:
+        conn.execute(
+            "INSERT INTO position_state "
+            "(symbol, side, entry_price, opened_at, peak_price, last_seen_at) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(symbol) DO UPDATE SET "
+            "  last_seen_at=excluded.last_seen_at",
+            (symbol, side, entry_price, opened_at, peak_price, _now_iso()),
+        )
+
+
+def update_position_peak(db_path: str, symbol: str, peak_price: str) -> None:
+    with get_conn(db_path) as conn:
+        conn.execute(
+            "UPDATE position_state SET peak_price = ?, last_seen_at = ? WHERE symbol = ?",
+            (peak_price, _now_iso(), symbol),
+        )
+
+
+def get_position_state(db_path: str, symbol: str) -> dict | None:
+    with get_conn(db_path) as conn:
+        row = conn.execute(
+            "SELECT symbol, side, entry_price, opened_at, peak_price, last_seen_at "
+            "FROM position_state WHERE symbol = ?", (symbol,)
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "symbol": row[0], "side": row[1], "entry_price": row[2],
+            "opened_at": row[3], "peak_price": row[4], "last_seen_at": row[5],
+        }
+
+
+def list_position_states(db_path: str) -> list[dict]:
+    with get_conn(db_path) as conn:
+        rows = conn.execute(
+            "SELECT symbol, side, entry_price, opened_at, peak_price, last_seen_at "
+            "FROM position_state"
+        ).fetchall()
+        return [
+            {
+                "symbol": r[0], "side": r[1], "entry_price": r[2],
+                "opened_at": r[3], "peak_price": r[4], "last_seen_at": r[5],
+            }
+            for r in rows
+        ]
+
+
+def delete_position_state(db_path: str, symbol: str) -> None:
+    with get_conn(db_path) as conn:
+        conn.execute("DELETE FROM position_state WHERE symbol = ?", (symbol,))

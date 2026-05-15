@@ -42,7 +42,7 @@ python3 {baseDir}/scripts/ambush/backtest.py \
     "surge_15m_threshold": 0.10
   },
   "long_params": {
-    "leverage": 4,
+    "leverage": 3,
     "position_pct": 0.20,
     "stop_loss_pct": 0.20,
     "trailing_pct": 0.25,
@@ -51,7 +51,7 @@ python3 {baseDir}/scripts/ambush/backtest.py \
     "cooldown_bars": 1
   },
   "short_params": {
-    "leverage": 8,
+    "leverage": 3,
     "position_pct": 0.30,
     "stop_loss_pct": 0.28,
     "trailing_pct": 0.28,

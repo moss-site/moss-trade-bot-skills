@@ -60,12 +60,17 @@ logger = logging.getLogger("ambush.runner")
 
 DEFAULT_AMBUSH_PARAMS = {
     "direction": "balanced",
+    # leverage capped at 3 for all ambush coins — Hyperliquid enforces this
+    # for the low-cap perp universe (127 / 230 coins as of 2026-05). Server
+    # `ValidateAmbushBotParams` rejects > 3; downstream `validateSourceLeverage`
+    # rejects again at order placement. "Aggressive" tuning happens via
+    # position_pct, not leverage.
     "long_params": {
-        "leverage": 4,
+        "leverage": 3,
         "position_pct": "0.20",
     },
     "short_params": {
-        "leverage": 8,
+        "leverage": 3,
         "position_pct": "0.30",
     },
     "rhythm": {

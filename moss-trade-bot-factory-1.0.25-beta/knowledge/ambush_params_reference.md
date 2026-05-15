@@ -88,7 +88,7 @@ LONG 信号（任一满足）:
 
 | 字段 | 范围 | 默认 | 含义 |
 |------|------|------|------|
-| `leverage` | 3 ~ 15 | 4 | 杠杆。做多偏保守，避免冲高回吐时高杠杆爆仓 |
+| `leverage` | 1 ~ 3 | 3 | 杠杆。**Hyperliquid 把异动币目标人群（127 / 230 个永续）全部 cap 在 3x**，server 端按 HL meta 强制——无论用户多激进，写超过 3 会被 `validateSourceLeverage` 拒绝。激进度通过 `position_pct` 表达 |
 | `position_pct` | 0.10 ~ 0.50 | 0.20 | 单笔保证金占可用资金比例 |
 | `stop_loss_pct` | 0.05 ~ 0.40 | 0.20 | 硬止损 |
 | `trailing_pct` | 0.05 ~ 0.30 | 0.25 | 移动止盈回撤（做多重在吃趋势，回撤稍宽） |
@@ -102,7 +102,7 @@ LONG 信号（任一满足）:
 
 | 字段 | 范围 | 默认 | 含义 |
 |------|------|------|------|
-| `leverage` | 3 ~ 15 | 8 | 杠杆。做空 odds 较高（统计显示约 60% 异动 24h 内回调），允许更高杠杆 |
+| `leverage` | 1 ~ 3 | 3 | 杠杆。和做多用同一个 HL cap=3x；做空 odds 高（统计 60% 异动 24h 内回调）但杠杆上限被交易所封死。激进度靠 `position_pct` |
 | `position_pct` | 0.10 ~ 0.50 | 0.30 | 单笔保证金占可用资金比例 |
 | `stop_loss_pct` | 0.05 ~ 0.40 | 0.28 | 硬止损。做空容易瞬间被轧（异动币高位还能再继续轧 30~50%），止损要更宽 |
 | `trailing_pct` | 0.05 ~ 0.30 | 0.28 | 移动止盈回撤 |
@@ -147,19 +147,26 @@ ambush bot **同时只允许 1 个持仓**（"单持仓锁"）。已持有 A 币
 | "动量启动" / "抓上涨" / "追涨" | `long` | 中性 |
 | "双向" / "balanced" / 未明说 | `balanced` | 中性 |
 
-### 激进度映射（影响 trigger + 仓位）
+### 激进度映射（影响仓位 — leverage 永远封顶 3x）
 
-| 用户描述 | trigger.* | leverage（双向都缩放） | position_pct（双向都缩放） |
-|---------|-----------|----------------------|----------------------------|
-| "保守" / "小试" / "稳健" | oi_mc=0.40 / z=2.5 / surge=0.12 | long=3 / short=5 | long=0.15 / short=0.20 |
-| 默认 / 未说 | oi_mc=0.35 / z=2.0 / surge=0.10 | long=4 / short=8 | long=0.20 / short=0.30 |
-| "激进" / "梭哈" / "抓极端" | oi_mc=0.30 / z=1.8 / surge=0.08 | long=8 / short=12 | long=0.30 / short=0.45 |
+> ⚠️ trigger 阈值 (`oi_mc` / `z_score` / `surge_15m`) 已经移到 server config，**per-bot 不可调**。表里只保留风格 → 仓位的映射。
+>
+> ⚠️ leverage 不再分档：HL 把异动币目标人群（127 / 230 永续）全部 cap 在 3x，无论用户口语多激进都得 ≤3。skill 推断时直接用 3，「激进」靠 `position_pct` 拉高仓位规模。
+
+| 用户描述 | leverage（双向都 3）| position_pct（long / short） |
+|---------|--------------------|-----------------------------|
+| "保守" / "小试" / "稳健" | 3 | 0.15 / 0.20 |
+| 默认 / 未说 | 3 | 0.20 / 0.30 |
+| "激进" / "梭哈" / "抓极端" | 3 | 0.30 / 0.45 |
+
+> 如果用户口语描述里出现"几倍杠杆"之类具体数字（哪怕只是"5 倍"），skill 必须主动说明：HL 已经把这些币 cap 在 3 倍，写超过会下不出单。然后落到 3。
 
 ### 默认值（用户描述里没出现的参数）
 
 ```python
 defaults = {
     "long_params": {
+        "leverage":      3,          # HL cap，强制
         "stop_loss_pct": 0.20,
         "trailing_pct":  0.25,
         "max_hold_hours": 30,
@@ -167,10 +174,11 @@ defaults = {
         "cooldown_bars": 1,
     },
     "short_params": {
-        "stop_loss_pct": 0.28,
-        "trailing_pct":  0.28,
-        "max_hold_hours": 132,
-        "cooldown_bars": 15,
+        "leverage":         3,       # HL cap，强制
+        "stop_loss_pct":    0.28,
+        "trailing_pct":     0.28,
+        "max_hold_hours":   132,
+        "cooldown_bars":    15,
         "entry_delay_bars": 1,
     },
     "rhythm": {
@@ -190,8 +198,9 @@ defaults = {
 ## 硬约束（不可调）
 
 - `direction` 三选一：`long` / `short` / `balanced`
-- `oi_mc_threshold` 不能 < 0.20（< 0.20 触发量爆炸 + 数据噪声）
-- `position_pct × leverage` 实际敞口建议 ≤ 5.0；超过会被回测拒绝并提示"风险过高"。**双通道分别校验**：long_params 和 short_params 各自的 `position_pct × leverage` 都要满足
+- **`leverage` ∈ [1, 3]**（Hyperliquid 已经把异动币目标人群全部 cap 在 3x；server `ValidateAmbushBotParams` 直接拒绝超过 3 的参数，`validateSourceLeverage` 在下单时再校验一次。skill 推断阶段也应该硬夹）
+- `oi_mc_threshold` 不能 < 0.20（< 0.20 触发量爆炸 + 数据噪声）—— 但 trigger 已经移到 server config，per-bot 不再可设
+- `position_pct × leverage` 实际敞口建议 ≤ 5.0；超过会被回测拒绝并提示"风险过高"。**双通道分别校验**：long_params 和 short_params 各自的 `position_pct × leverage` 都要满足。在 leverage=3 的现实下，position_pct 上限自然落到约 0.50（×3 = 1.5，远小于 5.0），所以这条约束在异动币场景下基本不会触发，主要由 `position_pct` 自身的 0.50 上限管住
 - `max_hold_hours` ≤ 168（更长无意义）
 - 单 bot **同时只允许 1 个持仓**（不可改）
 - **`long_params.cooldown_bars` 和 `short_params.cooldown_bars` 独立**：做空建议 ≥ 10，做多建议 ≤ 4

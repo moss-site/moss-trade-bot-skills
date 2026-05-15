@@ -39,13 +39,17 @@ TRIGGER_PRESETS = {
     },
 }
 
-# ---- Long 仓位预设（杠杆/仓位随激进度变化；其他字段固定默认）----
+# ---- Long 仓位预设（仓位随激进度变化；杠杆封顶 3x；其他字段固定默认）----
 # 默认值与 ambush_params_reference.md「做多参数」节一致：
 #   stop_loss=0.20, trailing=0.25, max_hold=30h, momentum_bars=2, cooldown=1
+#
+# leverage 不再分档：Hyperliquid 把异动币目标人群（127/230 永续）全部 cap 在 3x，
+# server `ValidateAmbushBotParams` 拒绝 leverage > 3 的参数，`validateSourceLeverage`
+# 在下单时再校验一次。所以「激进」只通过 `position_pct` 表达。
 LONG_LEVERAGE_POSITION = {
     "conservative": {"leverage": 3, "position_pct": 0.15},
-    "default":      {"leverage": 4, "position_pct": 0.20},
-    "aggressive":   {"leverage": 8, "position_pct": 0.30},
+    "default":      {"leverage": 3, "position_pct": 0.20},
+    "aggressive":   {"leverage": 3, "position_pct": 0.30},
 }
 LONG_FIXED = {
     "stop_loss_pct":  0.20,
@@ -55,13 +59,13 @@ LONG_FIXED = {
     "cooldown_bars":  1,
 }
 
-# ---- Short 仓位预设 ----
+# ---- Short 仓位预设（同样：杠杆封顶 3，激进度走 position_pct）----
 # 默认值与「做空参数」节一致：
 #   stop_loss=0.28, trailing=0.28, max_hold=132h, cooldown=15, entry_delay=1
 SHORT_LEVERAGE_POSITION = {
-    "conservative": {"leverage": 5,  "position_pct": 0.20},
-    "default":      {"leverage": 8,  "position_pct": 0.30},
-    "aggressive":   {"leverage": 12, "position_pct": 0.45},
+    "conservative": {"leverage": 3, "position_pct": 0.20},
+    "default":      {"leverage": 3, "position_pct": 0.30},
+    "aggressive":   {"leverage": 3, "position_pct": 0.45},
 }
 SHORT_FIXED = {
     "stop_loss_pct":    0.28,

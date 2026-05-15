@@ -52,23 +52,45 @@ async def run_ws(
         try:
             # 1. Bootstrap snapshot + replay missed events.
             since = db.get_last_event_id_seen(db_path)
-            logger.info("ambush ws: fetching bootstrap since=%d", since)
+            since_exit = db.get_last_exit_signal_id_seen(db_path)
+            logger.info(
+                "ambush ws: fetching bootstrap since=%d since_exit=%d",
+                since, since_exit,
+            )
             boot = await loop.run_in_executor(
-                None, lambda: client.get_bootstrap(since_event_id=since)
+                None,
+                lambda: client.get_bootstrap(
+                    since_event_id=since, since_exit_signal_id=since_exit,
+                ),
             )
             server_seq = int(boot.get("server_event_sequence", 0))
+            server_exit_seq = int(boot.get("server_exit_signal_sequence", 0))
             events = boot.get("recent_events") or []
+            exit_signals = boot.get("recent_exit_signals") or []
             logger.info(
-                "ambush ws: bootstrap ok, server_event_sequence=%d, replay_events=%d",
-                server_seq, len(events),
+                "ambush ws: bootstrap ok, server_event_sequence=%d "
+                "server_exit_signal_sequence=%d replay_events=%d replay_exits=%d",
+                server_seq, server_exit_seq, len(events), len(exit_signals),
             )
 
-            # 2. Replay missed events through the same handler.
+            # 2a. Replay missed open events.
             for ev in events:
                 await loop.run_in_executor(
                     None,
                     event_handler.process_event,
                     handler, db_path, direction, ev, "ws_bootstrap",
+                )
+
+            # 2b. Replay missed exit signals. Order matters: open events
+            # first (they may set local position state), exit signals
+            # second (they act on that state). In practice the two streams
+            # are independent within the 24h window, but processing opens
+            # first matches the natural causal order.
+            for sig in exit_signals:
+                await loop.run_in_executor(
+                    None,
+                    event_handler.process_exit_signal,
+                    handler, db_path, sig, "ws_bootstrap",
                 )
 
             # 3. WS connect with HMAC headers.
@@ -96,7 +118,11 @@ async def run_ws(
                 )
                 backoff = 5.0  # reset on successful connect
 
-                # 5. Event stream.
+                # 5. Event stream. Frame Type discriminates open events
+                # (type=="ambush_event", payload at .event) from exit
+                # signals (type=="ambush_exit_signal", payload at
+                # .exit_signal). Skill routes via the outer Type field so
+                # we never have to decode the inner payload to dispatch.
                 async for raw in ws:
                     if stop_event.is_set():
                         break
@@ -105,16 +131,26 @@ async def run_ws(
                     except json.JSONDecodeError:
                         logger.warning("ambush ws: malformed JSON, skipping")
                         continue
-                    if msg.get("type") != "ambush_event":
-                        continue
-                    ev = msg.get("event") or {}
-                    if not ev:
-                        continue
-                    await loop.run_in_executor(
-                        None,
-                        event_handler.process_event,
-                        handler, db_path, direction, ev, "ws_live",
-                    )
+                    msg_type = msg.get("type")
+                    if msg_type == "ambush_event":
+                        ev = msg.get("event") or {}
+                        if not ev:
+                            continue
+                        await loop.run_in_executor(
+                            None,
+                            event_handler.process_event,
+                            handler, db_path, direction, ev, "ws_live",
+                        )
+                    elif msg_type == "ambush_exit_signal":
+                        sig = msg.get("exit_signal") or {}
+                        if not sig:
+                            continue
+                        await loop.run_in_executor(
+                            None,
+                            event_handler.process_exit_signal,
+                            handler, db_path, sig, "ws_live",
+                        )
+                    # silently ignore other frame types (ready/pong/etc.)
 
         except asyncio.CancelledError:
             logger.info("ambush ws: cancelled")

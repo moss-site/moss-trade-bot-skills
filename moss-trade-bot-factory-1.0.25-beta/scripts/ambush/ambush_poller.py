@@ -48,10 +48,17 @@ async def run_poller(
     while not stop_event.is_set():
         try:
             since = db.get_last_event_id_seen(db_path)
-            events = await loop.run_in_executor(
+            since_exit = db.get_last_exit_signal_id_seen(db_path)
+            resp = await loop.run_in_executor(
                 None,
-                lambda: client.get_events_since(since_event_id=since, limit=batch_size),
+                lambda: client.get_events_since(
+                    since_event_id=since,
+                    since_exit_signal_id=since_exit,
+                    limit=batch_size,
+                ),
             )
+            events = resp.get("items") if isinstance(resp, dict) else []
+            exit_signals = resp.get("exit_signal_items") if isinstance(resp, dict) else []
             if events:
                 logger.info(
                     "ambush poller: fetched %d events since id=%d",
@@ -67,6 +74,19 @@ async def run_poller(
                     )
             else:
                 logger.debug("ambush poller: no new events since id=%d", since)
+            if exit_signals:
+                logger.info(
+                    "ambush poller: fetched %d exit signals since id=%d",
+                    len(exit_signals), since_exit,
+                )
+                for sig in exit_signals:
+                    if stop_event.is_set():
+                        break
+                    await loop.run_in_executor(
+                        None,
+                        event_handler.process_exit_signal,
+                        handler, db_path, sig, "poll",
+                    )
         except asyncio.CancelledError:
             logger.info("ambush poller: cancelled")
             return

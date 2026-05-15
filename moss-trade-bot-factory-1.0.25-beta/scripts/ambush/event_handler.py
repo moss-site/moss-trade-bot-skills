@@ -203,6 +203,151 @@ def _classify_order_status(result: Any) -> tuple[str, str | None, str | None]:
     return "failed", None, msg or code or "unknown_error"
 
 
+def process_exit_signal(
+    handler: EventHandler,
+    db_path: str,
+    signal: dict,
+    source: str,
+) -> None:
+    """Handle one platform-emitted exit signal envelope.
+
+    Backend decides WHEN to suggest closing (OI revert / 60d max_hold);
+    skill decides WHETHER to fully close based on the live position state.
+    For MVP: if a non-flat position exists on the signal's hl_symbol, we
+    flatten immediately via close_position. No partial-close logic yet —
+    the architecture leaves room (skill could throttle, scale-out, etc.)
+    but the simplest correct behavior is to honor the signal.
+
+    Idempotent on exit_signal_id: bootstrap replays after a disconnect
+    re-deliver signals we already acted on; INSERT OR IGNORE in
+    exit_signal_processed makes the second call a no-op + we early-return
+    before re-issuing the close. Position-existence check is the
+    secondary safety: if we already closed the position via the same
+    signal, get_positions() returns flat and we record action=no_position.
+
+    `source` ∈ {"ws_bootstrap", "ws_live", "poll"} for log tagging only.
+    """
+    try:
+        sig_id_raw = signal.get("exit_signal_id")
+        if sig_id_raw is None:
+            logger.warning("ambush handler: exit signal missing exit_signal_id, dropping: %s", signal)
+            return
+        try:
+            exit_signal_id = int(sig_id_raw)
+        except (TypeError, ValueError):
+            logger.warning("ambush handler: exit signal non-int id, dropping: %r", sig_id_raw)
+            return
+
+        opening_event_id = int(signal.get("opening_event_id") or 0)
+        hl_symbol_raw = str(signal.get("hl_symbol") or "").strip().upper()
+        reason = str(signal.get("reason") or "unknown")
+
+        if not hl_symbol_raw:
+            logger.warning(
+                "ambush handler: exit signal id=%d missing hl_symbol, dropping",
+                exit_signal_id,
+            )
+            db.set_last_exit_signal_id_seen(db_path, exit_signal_id)
+            return
+
+        if db.is_exit_signal_processed(db_path, exit_signal_id):
+            logger.debug(
+                "ambush handler: exit_signal_id=%d already processed (src=%s), skipping",
+                exit_signal_id, source,
+            )
+            db.set_last_exit_signal_id_seen(db_path, exit_signal_id)
+            return
+
+        target_symbol = hl_symbol_raw if hl_symbol_raw.endswith("USDC") else f"{hl_symbol_raw}USDC"
+
+        # Find the open position for this symbol (if any). The signal is
+        # advisory — if the skill has already closed elsewhere (manual /
+        # close_monitor / server stop_loss), we just record no_position.
+        try:
+            positions = handler.client.get_positions() or []
+        except Exception as e:
+            logger.warning(
+                "ambush handler: exit_signal_id=%d get_positions failed: %s — will retry on next signal",
+                exit_signal_id, e,
+            )
+            # Do NOT mark as processed; let a redelivery try again.
+            return
+
+        matching = None
+        for pos in positions:
+            sym = str(pos.get("symbol") or "").upper()
+            if sym != target_symbol:
+                continue
+            try:
+                qty = Decimal(str(pos.get("net_qty") or "0"))
+            except (InvalidOperation, ValueError):
+                qty = Decimal("0")
+            if qty == 0:
+                continue
+            matching = pos
+            break
+
+        if matching is None:
+            logger.info(
+                "ambush handler: exit_signal_id=%d sym=%s reason=%s src=%s — no open position, recording no_position",
+                exit_signal_id, target_symbol, reason, source,
+            )
+            db.record_exit_signal_processed(
+                db_path, exit_signal_id, opening_event_id, target_symbol,
+                reason, "no_position",
+            )
+            db.set_last_exit_signal_id_seen(db_path, exit_signal_id)
+            return
+
+        # Flatten. close_position uses reduce_only market IOC against
+        # the bot's current net position size.
+        prev_symbol = handler.client.symbol
+        handler.client.symbol = target_symbol
+        try:
+            result = handler.client.close_position(
+                reasoning=f"异动 平台退出信号 ({reason})",
+                reasoning_en=f"ambush_exit_signal: {reason}",
+            )
+        except Exception as e:
+            logger.exception(
+                "ambush handler: exit_signal_id=%d close raised: %s",
+                exit_signal_id, e,
+            )
+            db.record_exit_signal_processed(
+                db_path, exit_signal_id, opening_event_id, target_symbol,
+                reason, "failed", error_msg=str(e),
+            )
+            db.set_last_exit_signal_id_seen(db_path, exit_signal_id)
+            handler.client.symbol = prev_symbol
+            return
+        finally:
+            handler.client.symbol = prev_symbol
+
+        order = (result or {}).get("order") if isinstance(result, dict) else None
+        order_id_str = None
+        if isinstance(order, dict) and order.get("order_id"):
+            order_id_str = str(order["order_id"])
+        logger.info(
+            "ambush handler: exit_signal_id=%d sym=%s reason=%s src=%s — closed order_id=%s "
+            "filled_qty=%s avg=%s realized_pnl=%s",
+            exit_signal_id, target_symbol, reason, source, order_id_str,
+            (order or {}).get("filled_qty") if isinstance(order, dict) else None,
+            (order or {}).get("avg_fill_price") if isinstance(order, dict) else None,
+            (result or {}).get("realized_pnl") if isinstance(result, dict) else None,
+        )
+        db.record_exit_signal_processed(
+            db_path, exit_signal_id, opening_event_id, target_symbol,
+            reason, "closed", order_id=order_id_str,
+        )
+        db.set_last_exit_signal_id_seen(db_path, exit_signal_id)
+
+    except Exception as e:
+        logger.error(
+            "ambush handler: unexpected error processing exit_signal=%r: %s\n%s",
+            signal, e, traceback.format_exc(),
+        )
+
+
 def process_event(
     handler: EventHandler,
     db_path: str,

@@ -203,6 +203,83 @@ def _classify_order_status(result: Any) -> tuple[str, str | None, str | None]:
     return "failed", None, msg or code or "unknown_error"
 
 
+# Error codes/keywords that suggest the close attempt failed for a
+# transient reason — the position is still open and a redelivery
+# (WS reconnect bootstrap or REST poller) should retry. We deliberately
+# DO NOT mark the exit signal as processed for these.
+#
+# Anything not on this list is treated as a terminal failure (validation
+# reject, permission denied, etc.) and gets marked processed with
+# action=failed so we don't spin forever on an unfixable error.
+_TRANSIENT_CLOSE_ERROR_CODES = {
+    "market_recovering",
+    "MARKET_RECOVERING",
+    "market_is_recovering",
+    "HTTP_ERROR",            # urllib HTTP error wrapper (5xx + network)
+    "internal_error",
+    "INTERNAL_ERROR",
+    "service_unavailable",
+    "SERVICE_UNAVAILABLE",
+    "deadline_exceeded",
+    "DEADLINE_EXCEEDED",
+}
+_TRANSIENT_CLOSE_ERROR_KEYWORDS = (
+    "market is recovering",
+    "market recovering",
+    "timeout",
+    "timed out",
+    "connection",
+    "temporarily",
+)
+
+
+def _classify_close_result(result: Any) -> tuple[str, str | None, str | None, bool]:
+    """Inspect a TradingClient.close_position result.
+
+    Returns (action, order_id, error_msg, retriable).
+
+    Result shapes (from trading_client._submit_market_order via
+    _adapt_order_result):
+      Success → dict with `order` sub-dict carrying `order_id`; plus
+                `realized_pnl`, top-level `order_id`/`fill_price`/etc.
+      Failure → dict {"code": "...", "message": "..."} pass-through
+                from `_request`'s HTTP-error branch (no `order` key).
+                TradingClient does NOT raise on HTTP error; the caller
+                must classify.
+
+    Retriable semantics:
+      - Success → False (don't retry success)
+      - Terminal failure (validation, unknown code) → False (mark processed)
+      - Transient failure (recovering / 5xx / timeout) → True (do NOT
+        mark processed; next redelivery retries)
+    """
+    if not isinstance(result, dict):
+        # Truly unexpected — treat as terminal so we don't infinite-loop.
+        return "failed", None, f"unexpected close response: {result!r}", False
+
+    # Success path: real order dict with an order_id.
+    order = result.get("order")
+    if isinstance(order, dict) and order.get("order_id"):
+        order_id = str(order.get("order_id"))
+        status = str(order.get("status") or "").lower()
+        # Non-fill terminal statuses (rejected) are NOT a successful close
+        # — flag as terminal failure with the order id for audit.
+        if status and status not in ("filled", "partially_filled", ""):
+            return "failed", order_id, f"order status={status}", False
+        return "closed", order_id, None, False
+
+    # Error envelope.
+    code = str(result.get("code") or "")
+    msg = str(result.get("message") or "")
+    lower_msg = msg.lower()
+    is_transient = (
+        code in _TRANSIENT_CLOSE_ERROR_CODES
+        or any(kw in lower_msg for kw in _TRANSIENT_CLOSE_ERROR_KEYWORDS)
+    )
+    err_text = msg or code or "unknown_error"
+    return "failed", None, err_text, is_transient
+
+
 def process_exit_signal(
     handler: EventHandler,
     db_path: str,
@@ -300,44 +377,89 @@ def process_exit_signal(
             return
 
         # Flatten. close_position uses reduce_only market IOC against
-        # the bot's current net position size.
+        # the bot's current net position size. TradingClient does NOT
+        # raise on HTTP error — it returns {"code","message"} — so the
+        # except branch only catches client-side / ValueError raises
+        # (no open position, qty parse fail). Server errors are
+        # classified below by _classify_close_result.
         prev_symbol = handler.client.symbol
         handler.client.symbol = target_symbol
+        raised = None
         try:
             result = handler.client.close_position(
                 reasoning=f"异动 平台退出信号 ({reason})",
                 reasoning_en=f"ambush_exit_signal: {reason}",
             )
         except Exception as e:
+            raised = e
+            result = None
             logger.exception(
                 "ambush handler: exit_signal_id=%d close raised: %s",
                 exit_signal_id, e,
             )
-            db.record_exit_signal_processed(
-                db_path, exit_signal_id, opening_event_id, target_symbol,
-                reason, "failed", error_msg=str(e),
-            )
-            db.set_last_exit_signal_id_seen(db_path, exit_signal_id)
-            handler.client.symbol = prev_symbol
-            return
         finally:
             handler.client.symbol = prev_symbol
 
-        order = (result or {}).get("order") if isinstance(result, dict) else None
-        order_id_str = None
-        if isinstance(order, dict) and order.get("order_id"):
-            order_id_str = str(order["order_id"])
-        logger.info(
-            "ambush handler: exit_signal_id=%d sym=%s reason=%s src=%s — closed order_id=%s "
-            "filled_qty=%s avg=%s realized_pnl=%s",
-            exit_signal_id, target_symbol, reason, source, order_id_str,
-            (order or {}).get("filled_qty") if isinstance(order, dict) else None,
-            (order or {}).get("avg_fill_price") if isinstance(order, dict) else None,
-            (result or {}).get("realized_pnl") if isinstance(result, dict) else None,
+        if raised is not None:
+            # Client-side raise (e.g., "no open position found" from
+            # _resolve_open_position). Same effect as no_position: the
+            # bot is already flat for this symbol — record as terminal,
+            # advance cursor.
+            err_str = str(raised)
+            is_no_position = (
+                "no open position" in err_str.lower()
+                or "no position" in err_str.lower()
+            )
+            action = "no_position" if is_no_position else "failed"
+            db.record_exit_signal_processed(
+                db_path, exit_signal_id, opening_event_id, target_symbol,
+                reason, action, error_msg=err_str,
+            )
+            db.set_last_exit_signal_id_seen(db_path, exit_signal_id)
+            return
+
+        action, order_id_str, err_text, retriable = _classify_close_result(result)
+
+        if action == "closed":
+            order_dict = result.get("order") if isinstance(result, dict) else {}
+            logger.info(
+                "ambush handler: exit_signal_id=%d sym=%s reason=%s src=%s — "
+                "closed order_id=%s filled_qty=%s avg=%s realized_pnl=%s",
+                exit_signal_id, target_symbol, reason, source, order_id_str,
+                (order_dict or {}).get("filled_qty"),
+                (order_dict or {}).get("avg_fill_price"),
+                (result or {}).get("realized_pnl"),
+            )
+            db.record_exit_signal_processed(
+                db_path, exit_signal_id, opening_event_id, target_symbol,
+                reason, "closed", order_id=order_id_str,
+            )
+            db.set_last_exit_signal_id_seen(db_path, exit_signal_id)
+            return
+
+        # action == "failed". Retriable failures (market_recovering /
+        # HTTP 5xx / timeout) stay UNACKNOWLEDGED: don't insert into
+        # exit_signal_processed and don't advance the cursor. Next WS
+        # bootstrap or poller tick will redeliver the same signal and
+        # we'll retry the close. Terminal failures get marked processed
+        # with action=failed so we don't infinite-loop on something
+        # that won't fix itself.
+        if retriable:
+            logger.warning(
+                "ambush handler: exit_signal_id=%d sym=%s reason=%s — close "
+                "TRANSIENT failure: %s — leaving unacked for redelivery",
+                exit_signal_id, target_symbol, reason, err_text,
+            )
+            return
+
+        logger.warning(
+            "ambush handler: exit_signal_id=%d sym=%s reason=%s — close "
+            "TERMINAL failure: %s — marking processed (no retry)",
+            exit_signal_id, target_symbol, reason, err_text,
         )
         db.record_exit_signal_processed(
             db_path, exit_signal_id, opening_event_id, target_symbol,
-            reason, "closed", order_id=order_id_str,
+            reason, "failed", order_id=order_id_str, error_msg=err_text,
         )
         db.set_last_exit_signal_id_seen(db_path, exit_signal_id)
 

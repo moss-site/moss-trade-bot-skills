@@ -37,9 +37,17 @@ from core.replay_depth_templates import FIXED_REPLAY_DEPTH_BOOKS
 
 
 EXPECTED_COINS = [
+    # original 22 (HyperCore main board, USDC)
     "ADA", "APT", "ARB", "ATOM", "AVAX", "BCH", "BNB", "BTC", "DOGE", "DOT", "ETH",
     "FIL", "HBAR", "LINK", "LTC", "NEAR", "OP", "SOL", "SUI", "TRX", "UNI", "XRP",
+    # added 2026-05-18 — HYPE (main board) + 20 xyz HIP-3 builder assets
+    # xyz live trading is gated on backend HIP-3 client integration (follow-up PR);
+    # depth + csv staged here so backtest/verify accept these coins
+    "HYPE",
+    "AMD", "BRENTOIL", "CBRS", "CL", "COIN", "CRCL", "GOLD", "GOOGL", "INTC", "META",
+    "MSTR", "MU", "NVDA", "ORCL", "SILVER", "SKHX", "SNDK", "SP500", "TSLA", "XYZ100",
 ]
+EXPECTED_COINS = sorted(EXPECTED_COINS)
 
 
 def _D(v) -> Decimal:

@@ -23,6 +23,31 @@ ASSET_MAX_LEVERAGES = {
     "FIL": 5,
     "HBAR": 5,
     "OP": 5,
+    # 2026-05-18: HyperCore main-board addition
+    "HYPE": 10,
+    # 2026-05-18: xyz HIP-3 builder assets. Listed so backtest / verify accept them.
+    # Realtime trading via xyz requires HIP-3 client integration on the backend
+    # (see backend internal/domain/symbols.go XYZBuilderAssets) — follow-up PR.
+    "XYZ100": 30,
+    "SP500": 50,
+    "CL": 20,
+    "BRENTOIL": 20,
+    "SILVER": 25,
+    "GOLD": 25,
+    "NVDA": 20,
+    "TSLA": 10,
+    "INTC": 10,
+    "AMD": 10,
+    "MU": 10,
+    "SNDK": 10,
+    "MSTR": 10,
+    "CRCL": 10,
+    "COIN": 10,
+    "META": 10,
+    "GOOGL": 10,
+    "ORCL": 10,
+    "SKHX": 10,
+    "CBRS": 10,
 }
 
 

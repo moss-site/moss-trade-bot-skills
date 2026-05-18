@@ -481,30 +481,54 @@ class TradingClient:
         client_order_id: str = "",
         reasoning: str = "",
         reasoning_en: str = "",
+        *,
+        symbol: str = "",
+        bot_id: str = "",
     ) -> dict:
-        """Close position through the unified order-reporting endpoint."""
-        position = self._resolve_open_position(position_side)
-        current_side = self._normalize_position_side(position.get("side") or position.get("position_side"))
-        if current_side == "LONG":
-            close_side = "sell"
-        elif current_side == "SHORT":
-            close_side = "buy"
-        else:
-            raise ValueError(f"unsupported position side: {position.get('side') or position.get('position_side')}")
+        """Close position through the unified order-reporting endpoint.
 
-        close_qty_value = str(close_qty or position.get("qty") or position.get("net_qty") or "").strip()
-        if not close_qty_value:
-            raise ValueError("close qty unavailable from current position")
-        leverage = int(position.get("leverage") or 1)
-        return self._submit_market_order(
-            close_side,
-            leverage,
-            qty=close_qty_value,
-            reduce_only=True,
-            client_order_id=client_order_id,
-            reasoning=reasoning,
-            reasoning_en=reasoning_en,
-        )
+        Per-call `symbol` / `bot_id` overrides (keyword-only) save callers
+        from mutating the shared client instance just to close one position.
+        The previous pattern of `c.symbol = "FOO"; c.close_position(...)`
+        was the most common foot-gun in ad-hoc / E2E scripts — first call
+        would fail with `no open position found for BTCUSDC` (the default
+        client symbol) before the human realized `symbol` had to be set on
+        the instance, not passed in.  Overrides are call-scoped: they swap
+        `self.symbol` / `self.bot_id` for the duration and restore on
+        return, so concurrent callers sharing one client don't drift.
+        """
+        prev_symbol = self.symbol
+        prev_bot_id = self.bot_id
+        if symbol:
+            self.symbol = self._normalize_symbol(symbol)
+        if bot_id:
+            self.bot_id = bot_id
+        try:
+            position = self._resolve_open_position(position_side)
+            current_side = self._normalize_position_side(position.get("side") or position.get("position_side"))
+            if current_side == "LONG":
+                close_side = "sell"
+            elif current_side == "SHORT":
+                close_side = "buy"
+            else:
+                raise ValueError(f"unsupported position side: {position.get('side') or position.get('position_side')}")
+
+            close_qty_value = str(close_qty or position.get("qty") or position.get("net_qty") or "").strip()
+            if not close_qty_value:
+                raise ValueError("close qty unavailable from current position")
+            leverage = int(position.get("leverage") or 1)
+            return self._submit_market_order(
+                close_side,
+                leverage,
+                qty=close_qty_value,
+                reduce_only=True,
+                client_order_id=client_order_id,
+                reasoning=reasoning,
+                reasoning_en=reasoning_en,
+            )
+        finally:
+            self.symbol = prev_symbol
+            self.bot_id = prev_bot_id
 
     # ── Public display (no auth) ──
 

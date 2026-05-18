@@ -288,123 +288,6 @@ def _classify_order_status(result: Any) -> tuple[str, str | None, str | None]:
     return "failed", None, msg or code or "unknown_error"
 
 
-# Order-side transient errors — same family as the close-side set above but
-# with STALE_MARK_PRICE added: on the *first* ambush event for a newly-
-# subscribed symbol (e.g. first TST event since server restart), the
-# desired-symbols recompute → WS shard reconcile → first mark tick chain
-# takes 2-15s. The skill posts the order ~30ms after the event arrives,
-# always inside that window. Server returns `STALE_MARK_PRICE` /
-# "mark price unavailable" and the order has to be retried. See
-# 2026-05-18 E2E findings + bright-wobbling-rain.md plan item 3.
-_TRANSIENT_ORDER_ERROR_CODES = {
-    "STALE_MARK_PRICE",
-    "stale_mark_price",
-    "MARKET_RECOVERING",
-    "market_recovering",
-    "market_is_recovering",
-    "HTTP_ERROR",
-    "INTERNAL_ERROR",
-    "internal_error",
-    "SERVICE_UNAVAILABLE",
-    "service_unavailable",
-}
-_TRANSIENT_ORDER_ERROR_KEYWORDS = (
-    "mark price unavailable",
-    "mark price is stale",
-    "market is recovering",
-    "market recovering",
-    "timeout",
-    "timed out",
-    "connection",
-    "temporarily",
-)
-# Retry budget for transient order failures. Total worst-case latency:
-# sum(_ORDER_RETRY_BACKOFFS) = 12s. Chosen to cover the typical "new
-# symbol first-tick" window without blocking the event loop long enough
-# for the next event to back up — events arrive at most every few
-# seconds even in a busy ambush window.
-_ORDER_RETRY_BACKOFFS = (2.0, 4.0, 6.0)
-
-
-def _is_transient_order_error(code: str, msg: str) -> bool:
-    if code in _TRANSIENT_ORDER_ERROR_CODES:
-        return True
-    lower = msg.lower()
-    return any(kw in lower for kw in _TRANSIENT_ORDER_ERROR_KEYWORDS)
-
-
-def _open_with_retry(
-    handler,
-    side: str,
-    notional: Decimal,
-    leverage: int,
-    client_order_id: str,
-    reasoning_zh: str,
-    reasoning_en: str,
-    target_symbol: str,
-    *,
-    log_prefix: str,
-) -> Any:
-    """Submit an open order with transient-error retries.
-
-    Retries on STALE_MARK_PRICE / market_recovering / network blips per
-    `_ORDER_RETRY_BACKOFFS` schedule (2s, 4s, 6s = 12s budget).  Only the
-    *initial* per-symbol mark cache cold-start needs this — the server-side
-    Reconcile signal triggered by the ambush_event insert plus the WS
-    shard reconciliation usually fill the cache within 2-15s.  After
-    retries are exhausted, returns the last error envelope unchanged so
-    `_classify_order_status` reports the terminal failure.
-
-    Each call is wrapped in a symbol set/restore on the shared client
-    instance so concurrent callers (deferred-open daemons) don't drift.
-    """
-    notional_str = f"{notional:.2f}"
-    prev_symbol = handler.client.symbol
-    handler.client.symbol = target_symbol
-    try:
-        result = None
-        for attempt, backoff in enumerate([0.0, *_ORDER_RETRY_BACKOFFS]):
-            if backoff > 0:
-                time.sleep(backoff)
-            if side == decision_mod.SIDE_LONG:
-                result = handler.client.open_long(
-                    notional_str, leverage, client_order_id,
-                    reasoning_zh, reasoning_en,
-                )
-            else:
-                result = handler.client.open_short(
-                    notional_str, leverage, client_order_id,
-                    reasoning_zh, reasoning_en,
-                )
-            if not isinstance(result, dict):
-                return result
-            if result.get("order_id"):
-                if attempt > 0:
-                    logger.info(
-                        "ambush handler: %s order recovered after %d retries (cold mark cache cleared)",
-                        log_prefix, attempt,
-                    )
-                return result
-            code = str(result.get("code") or "")
-            msg = str(result.get("message") or "")
-            if not _is_transient_order_error(code, msg):
-                return result  # terminal — caller classifies as failed/rejected
-            if attempt < len(_ORDER_RETRY_BACKOFFS):
-                logger.info(
-                    "ambush handler: %s order transient error (%s: %s) — retry %d/%d after %.1fs",
-                    log_prefix, code or "?", msg or "?", attempt + 1,
-                    len(_ORDER_RETRY_BACKOFFS), _ORDER_RETRY_BACKOFFS[attempt],
-                )
-            else:
-                logger.warning(
-                    "ambush handler: %s order still transient after %d retries (giving up): %s",
-                    log_prefix, len(_ORDER_RETRY_BACKOFFS), msg or code or "?",
-                )
-        return result
-    finally:
-        handler.client.symbol = prev_symbol
-
-
 # Error codes/keywords that suggest the close attempt failed for a
 # transient reason — the position is still open and a redelivery
 # (WS reconnect bootstrap or REST poller) should retry. We deliberately
@@ -722,17 +605,21 @@ def _run_deferred_open(
             "(after %ds wait)",
             event_id, target_symbol, decision.side, delay_seconds,
         )
-        # _open_with_retry handles cold-mark-cache races (STALE_MARK_PRICE
-        # etc) with internal 2s+4s+6s backoffs. Especially relevant here:
-        # after a 4h sleep the symbol's mark cache might have aged out
-        # (the realtime market loop only retains entries for symbols still
-        # in the desired set; a deferred SHORT on a symbol with no other
-        # activity will likely need a fresh subscription cycle).
-        result = _open_with_retry(
-            handler, decision.side, notional, leverage, client_order_id,
-            reasoning_zh, reasoning_en, target_symbol,
-            log_prefix=f"deferred-open event_id={event_id} sym={target_symbol}",
-        )
+        prev_symbol = handler.client.symbol
+        handler.client.symbol = target_symbol
+        try:
+            if decision.side == decision_mod.SIDE_LONG:
+                result = handler.client.open_long(
+                    f"{notional:.2f}", leverage, client_order_id,
+                    reasoning_zh, reasoning_en,
+                )
+            else:
+                result = handler.client.open_short(
+                    f"{notional:.2f}", leverage, client_order_id,
+                    reasoning_zh, reasoning_en,
+                )
+        finally:
+            handler.client.symbol = prev_symbol
         status, order_id, err = _classify_order_status(result)
         logger.info(
             "ambush handler: deferred-open event_id=%d %s status=%s order_id=%s err=%s",
@@ -1083,14 +970,16 @@ def process_event(
             return
 
         try:
-            # _open_with_retry handles cold-mark-cache races (STALE_MARK_PRICE
-            # / market_recovering) with internal 2s + 4s + 6s backoffs.
-            # It also manages the client.symbol set/restore.
-            result = _open_with_retry(
-                handler, decision.side, notional, leverage, client_order_id,
-                reasoning_zh, reasoning_en, target_symbol,
-                log_prefix=_format_event_brief(event),
-            )
+            if decision.side == decision_mod.SIDE_LONG:
+                result = handler.client.open_long(
+                    f"{notional:.2f}", leverage, client_order_id,
+                    reasoning_zh, reasoning_en,
+                )
+            else:
+                result = handler.client.open_short(
+                    f"{notional:.2f}", leverage, client_order_id,
+                    reasoning_zh, reasoning_en,
+                )
         except Exception as e:
             logger.exception("ambush handler: order submit raised for %s: %s",
                              _format_event_brief(event), e)
@@ -1099,7 +988,12 @@ def process_event(
                 order_status="failed", error_msg=str(e),
             )
             db.set_last_event_id_seen(db_path, event_id)
+            handler.client.symbol = prev_symbol
             return
+        finally:
+            # restore single-symbol client invariant for any later code
+            # that might still depend on it (positions list filter etc).
+            handler.client.symbol = prev_symbol
 
         status, order_id, err = _classify_order_status(result)
         logger.info(

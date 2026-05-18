@@ -20,10 +20,29 @@ _SHARE_ROOT = Path(__file__).resolve().parents[2]
 _DATA_DIR = _SHARE_ROOT / "data_cache"
 
 
+# xyz HIP-3 builder base assets (added 2026-05-18). Hyperliquid /info expects
+# these to be queried with the "xyz:" namespace prefix (e.g. coin="xyz:NVDA")
+# rather than the bare base name. Mirrors XYZBuilderAssets in
+# internal/domain/symbols.go in the backend repo.
+_XYZ_BASE_ASSETS = frozenset({
+    "XYZ100", "SP500", "CL", "BRENTOIL", "SILVER", "GOLD",
+    "NVDA", "TSLA", "INTC", "AMD", "MU", "SNDK", "MSTR", "CRCL",
+    "COIN", "META", "GOOGL", "ORCL", "SKHX", "CBRS",
+})
+
+
 def normalize_coin(symbol: str) -> str:
+    """Map internal symbol notation to the Hyperliquid /info coin identifier.
+
+    Main-board assets return the bare base (e.g. 'BTCUSDC' -> 'BTC').
+    HIP-3 xyz builder assets return the prefixed form (e.g. 'NVDAUSDC' -> 'xyz:NVDA')
+    so funding history / l2Book / candle requests hit the correct universe.
+    """
     value = (symbol or "").strip().upper().replace("/", "").replace("-", "")
     if value.endswith("USDC"):
-        return value[:-4]
+        value = value[:-4]
+    if value in _XYZ_BASE_ASSETS:
+        return f"xyz:{value}"
     return value
 
 

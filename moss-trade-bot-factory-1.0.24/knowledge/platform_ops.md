@@ -42,7 +42,13 @@
 
 平台用 **2025-10-06 ~ 2026-03-03** 区间在服务端回测校验。fingerprint 和 result 必须基于该区间。本地自玩可用其他区间，但上传前需用该区间重跑。
 
-- 回测 / 上传验证使用预置的 Hyperliquid 固定数据集 CSV（`scripts/data_cache/` 目录）
+**短历史 xyz 资产例外**（2026-05-18 加入）：以下 3 个 xyz 资产在 Hyperliquid 上市晚，CSV 命名仍是 `_2025-10-06_148d` 但实际数据短于 148 天：
+- `xyz:SP500` / `xyz:BRENTOIL`：起 2026-03-27（约 52 天）
+- `xyz:CBRS`：起 2026-05-01（约 17 天）
+
+回测 + verify 都接受这些短窗口（平台 verify 用 fingerprint 里的 start/end 算 actual 区间，不强求 148 天），不要按旧不变量误判。
+
+- 回测 / 上传验证使用预置的 Hyperliquid 固定数据集 CSV（`scripts/data_cache/` 目录，43 币）
 - 上传包中的 Bot 文案现在应显式带双语：`name_i18n/personality_i18n/description_i18n = {zh, en}`
 - 上传接口现在按请求体严格校验双语字段：缺任意一个 `*_i18n.zh/en`，即使旧单字段有值，也会直接拒绝
 - 若中文文案含中文字符，`package_upload.py` 会要求你补充自然英文版本；不要把中文原样复制到 `en`

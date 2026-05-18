@@ -41,7 +41,10 @@ metadata: {"openclaw": {"requires": {"bins": ["python3"]}, "emoji": "🤖"}}
 自动推断（从用户描述中判断，不要追问）：
 - **交易品种**：从用户描述中提取。"交易ETH"→`ETH/USDC`，"做空SOL"→`SOL/USDC`，未提及具体币种→默认 `BTC/USDC`。本 skill 全流程统一使用 USDC 永续报价（与 Hyperliquid 后端、平台 API 一致）
   - 用户模糊说"主流币" → 默认 `ETH/USDC`
-  - **能否本地回测只看 `scripts/data_cache/` 是否有对应 CSV**。本 skill 已内置 22 个 USDC 永续 148 天 15m 数据集（BTC、ETH、SOL、BNB、DOGE、APT、ATOM、AVAX、BCH、DOT、FIL、HBAR、LINK、LTC、NEAR、OP、SUI、TRX、UNI、XRP、ADA、ARB），与后端 `domain.AllSupportedRealtimeSymbols()` 同步覆盖。22 币之外的 symbol 本 skill **不支持本地回测、不支持用户自行提供 CSV**——Step 1 应直接引导用户从这 22 币里重选。具体分支见下方「回测数据选择」
+  - **能否本地回测只看 `scripts/data_cache/` 是否有对应 CSV**。本 skill 已内置 **43 个 USDC 永续数据集**（2026-05-18 扩展），按类型分两组：
+    - **HyperCore 主板（23 个，15m 148d，2025-10-06 起）**：BTC、ETH、SOL、BNB、DOGE、APT、ATOM、AVAX、BCH、DOT、FIL、HBAR、LINK、LTC、NEAR、OP、SUI、TRX、UNI、XRP、ADA、ARB、**HYPE**
+    - **xyz HIP-3 builder（20 个，15m，新市场历史较短）**：XYZ100、SP500、CL、BRENTOIL、SILVER、GOLD、NVDA、TSLA、INTC、AMD、MU、SNDK、MSTR、CRCL、COIN、META、GOOGL、ORCL、SKHX、CBRS
+    - 与后端 `domain.AllSupportedRealtimeSymbols()` + `XYZBuilderAssets` 同步覆盖。43 币之外的 symbol 本 skill **不支持本地回测、不支持用户自行提供 CSV**——Step 1 应直接引导用户从这 43 币里重选。具体分支见下方「回测数据选择」
   - 平台是否支持某 alt 币种（用于 Step 4 上传 / Step 5 实盘）由平台接口实时返回决定，在 Step 4/5 时由 `package_upload.py` / `live_trade.py` 按平台错误响应处理，Step 1 不预先查询
 - 方向：趋势跟随→双向(0.5)，做空/逆势→偏空(0.1~0.3)，保守/定投→偏多(0.6~0.8)
 - 杠杆：保守→3~5x，中性→8~12x，激进→15~25x，梭哈→25~40x。**最终值必须 ≤ 该 symbol 的 Hyperliquid 上限** —— 写参数前先读 `cat {baseDir}/knowledge/leverage_caps.md` 查表，超限按上限封顶并在 Step 2 摘要里告知用户"已按上限 Nx 封顶"
@@ -60,19 +63,26 @@ metadata: {"openclaw": {"requires": {"bins": ["python3"]}, "emoji": "🤖"}}
 
 **回测数据选择（必须先决定再进 Step 2）**：
 
-统一使用预置的 Hyperliquid 固定数据集（15m，2025-10-06 ~ 2026-03-03），按 Step 1 确定的 symbol **自动定位 CSV**：
+统一使用预置的 Hyperliquid 固定数据集（15m），按 Step 1 确定的 symbol **自动定位 CSV**。**注意：覆盖区间分两组**（2026-05-18 更新）：
+
+- **主板 23 币 + 大多数 xyz 资产** → `2025-10-06 ~ 2026-03-03`（148 天，约 14K bars）
+- **xyz 短历史 3 币**（SP500 / CBRS / BRENTOIL，市场上市晚）→ 文件名仍带 `_2025-10-06_148d` 后缀（命名约定不变），但实际数据从各自上市日起：SP500 + BRENTOIL 约 5000 bars 起 2026-03-27，CBRS 约 1600 bars 起 2026-05-01。回测能正常跑（bar 少），verify endpoint 接受。
 
 ```bash
-SYMBOL="<Step 1 确定的品种，如 BTC/USDC / ETH/USDC / SOL/USDC>"
+SYMBOL="<Step 1 确定的品种，如 BTC/USDC / ETH/USDC / NVDA/USDC>"
 COMPACT=$(echo "$SYMBOL" | tr -d '/:-' | tr '[:lower:]' '[:upper:]')
 DATA_CSV="{baseDir}/scripts/data_cache/hyperliquid_${COMPACT}_15m_2025-10-06_148d.csv"
 ```
 
-当前 `scripts/data_cache/` 内置的币种（22 个，与后端 `domain.AllSupportedRealtimeSymbols()` 同步）：BTC / ETH / SOL / BNB / APT / ATOM / AVAX / BCH / DOGE / DOT / FIL / HBAR / LINK / LTC / NEAR / OP / SUI / TRX / UNI / XRP / ADA / ARB。文件命名格式固定为 `hyperliquid_{COMPACT}USDC_15m_2025-10-06_148d.csv`（全部 USDC 永续）。**运行时不接受用户传入外部 CSV**。
+当前 `scripts/data_cache/` 内置的币种（**43 个**，与后端 `domain.AllSupportedRealtimeSymbols()` + `XYZBuilderAssets` 同步）：
+- HyperCore 主板（23）：BTC / ETH / SOL / BNB / APT / ATOM / AVAX / BCH / DOGE / DOT / FIL / HBAR / LINK / LTC / NEAR / OP / SUI / TRX / UNI / XRP / ADA / ARB / HYPE
+- xyz HIP-3 builder（20）：XYZ100 / SP500 / CL / BRENTOIL / SILVER / GOLD / NVDA / TSLA / INTC / AMD / MU / SNDK / MSTR / CRCL / COIN / META / GOOGL / ORCL / SKHX / CBRS
 
-> **平台端支持范围**：本 skill 支持的回测/创建币种 = data_cache 目录里实际有 CSV 的 22 币种（与后端 `domain.AllSupportedRealtimeSymbols()` 同步）。22 币之外的 symbol 即使 backend 未来支持，本 skill 也不会代用户跑回测；Step 1 应直接引导用户从这 22 币里选。
+文件命名格式固定为 `hyperliquid_{COMPACT}USDC_15m_2025-10-06_148d.csv`（全部 USDC 永续；xyz 资产文件名只用 base，例如 `hyperliquid_NVDAUSDC_15m_*.csv` 对应 HL 的 `xyz:NVDA`，后端 normalize 自动路由）。**运行时不接受用户传入外部 CSV**。
 
-若 `DATA_CSV` 不存在（即用户选了 22 币之外的 symbol），**不要**用已有币种的 CSV 给其他币种打指纹（会导致 symbol/数据错配），也**不要**接受用户传入的外部 CSV 路径。直接告知用户「本 skill 仅支持以下 22 币种的本地回测：BTC / ETH / SOL / BNB / APT / ATOM / AVAX / BCH / DOGE / DOT / FIL / HBAR / LINK / LTC / NEAR / OP / SUI / TRX / UNI / XRP / ADA / ARB。请重新选择其中一个」，然后停下等待用户改 symbol。
+> **平台端支持范围**：本 skill 支持的回测/创建币种 = data_cache 目录里实际有 CSV 的 43 币种（与后端 `domain.AllSupportedRealtimeSymbols()` + `XYZBuilderAssets` 同步）。43 币之外的 symbol 即使 backend 未来支持，本 skill 也不会代用户跑回测；Step 1 应直接引导用户从这 43 币里选。
+
+若 `DATA_CSV` 不存在（即用户选了 43 币之外的 symbol），**不要**用已有币种的 CSV 给其他币种打指纹（会导致 symbol/数据错配），也**不要**接受用户传入的外部 CSV 路径。直接告知用户「本 skill 仅支持以下 43 币种的本地回测：[主板 23] BTC / ETH / SOL / BNB / APT / ATOM / AVAX / BCH / DOGE / DOT / FIL / HBAR / LINK / LTC / NEAR / OP / SUI / TRX / UNI / XRP / ADA / ARB / HYPE；[xyz 20] XYZ100 / SP500 / CL / BRENTOIL / SILVER / GOLD / NVDA / TSLA / INTC / AMD / MU / SNDK / MSTR / CRCL / COIN / META / GOOGL / ORCL / SKHX / CBRS。请重新选择其中一个」，然后停下等待用户改 symbol。
 
 生成指纹（`<SYMBOL>` 即 Step 1 贯穿规则确定的值）：
 ```bash

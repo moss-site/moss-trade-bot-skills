@@ -185,14 +185,58 @@ def _run_tick(client: TradingClient, db_path: str, ambush_params: dict) -> None:
         open_symbols.add(symbol)
         _evaluate_position(client, db_path, ambush_params, pos, symbol, net_qty)
 
-    # Garbage-collect local rows for symbols no longer open.
+    # Garbage-collect local rows for symbols no longer open. Two close
+    # channels reach here:
+    #   1. close_monitor itself closed via trailing/max_hold above — the
+    #      `record_symbol_action("close", ...)` call inside _close_now
+    #      already recorded that event, so we'd double-record if we did it
+    #      again here. Avoid double-counting by checking the last action.
+    #   2. Externally closed: server stop_loss watcher, manual API close,
+    #      ambush exit_signal handler, etc. In these cases no skill-side
+    #      `close` row exists yet, and `same_coin_dedup_days` would stay
+    #      armed forever (gate compares against last `open` ignoring whether
+    #      a close happened). Backfill a synthetic close row so the dedup
+    #      gate disarms naturally on the next event for this base.
     for row in db.list_position_states(db_path):
-        if row["symbol"] not in open_symbols:
-            logger.info(
-                "ambush close_monitor: %s no longer open elsewhere — clearing local state",
-                row["symbol"],
+        symbol = row["symbol"]
+        if symbol in open_symbols:
+            continue
+        logger.info(
+            "ambush close_monitor: %s no longer open elsewhere — clearing local state",
+            symbol,
+        )
+        db.delete_position_state(db_path, symbol)
+        base = symbol[:-4] if symbol.upper().endswith("USDC") else symbol
+        try:
+            last_action_at = db.last_action_at(db_path, base, "close")
+            opened_at_row = db.last_action_at(db_path, base, "open")
+        except Exception as e:
+            logger.warning("ambush close_monitor: last_action_at probe failed for %s: %s", base, e)
+            last_action_at = None
+            opened_at_row = None
+        # Only backfill if there is a recent `open` AND no `close` after it
+        # — otherwise we'd write a spurious close (e.g. on skill restart
+        # where the bot is already flat and the open was days ago and
+        # already paired).
+        needs_backfill = (
+            opened_at_row is not None
+            and (last_action_at is None or last_action_at < opened_at_row)
+        )
+        if not needs_backfill:
+            continue
+        try:
+            db.record_symbol_action(
+                db_path, base, "close", order_id=None,
             )
-            db.delete_position_state(db_path, row["symbol"])
+            logger.info(
+                "ambush close_monitor: backfilled close action for %s (external close detected; rhythm gates disarmed)",
+                base,
+            )
+        except Exception as e:
+            logger.warning(
+                "ambush close_monitor: backfill close failed for %s: %s",
+                base, e,
+            )
 
 
 def _evaluate_position(

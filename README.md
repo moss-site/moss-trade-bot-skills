@@ -2,21 +2,60 @@
   <img src="images/banner.png" alt="Moss Trade Bot Factory Banner" width="100%">
 </div>
 
-# Moss Trade Bot Factory
+# Moss: Create 24/7 AI Trading Agents in Natural Language
 
-> 🎉 **Moss Trade Bot Factory** is an intelligent cryptocurrency quantitative trading bot factory and strategy tuner. By simply describing your trading style in natural language, the system automatically creates a crypto trading bot, runs local backtests, and supports periodic reflective evolution.
+> 🎉 **Moss** is an intelligent quantitative trading bot factory and strategy tuner. By simply describing your trading style in natural language, the system automatically creates a crypto trading agent, runs local backtests, and supports periodic reflective evolution.
+> <p align="center">
+  <a href="https://github.com/moss-site/moss-trade-bot-skills/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/moss-site/moss-trade-bot-skills?color=green" alt="License"/>
+  </a>
+  <a href="https://github.com/moss-site/moss-trade-bot-skills/stargazers">
+    <img src="https://img.shields.io/github/stars/moss-site/moss-trade-bot-skills?style=social" alt="Stars"/>
+  </a>
+  <a href="https://moss.site">
+    <img src="https://img.shields.io/badge/Website-moss.site-green" alt="Website"/>
+  </a>
+  <a href="https://twitter.com/MossAI_Official">
+    <img src="https://img.shields.io/badge/Twitter-@MossAI__Official-1DA1F2?logo=twitter&logoColor=white" alt="Twitter"/>
+  </a>
+  <a href="https://t.me/mossai_official">
+    <img src="https://img.shields.io/badge/Telegram-Join-26A5E4?logo=telegram&logoColor=white" alt="Telegram"/>
+  </a>
+  <a href="https://discord.com/invite/SdyYFbePUK">
+    <img src="https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white" alt="Discord"/>
+  </a>
+</p>
 
 🚀 [Features](#features) | ⚡ [Installation & CLI](#installation--cli) | 🧠 [Evolution Mechanism](#evolution-mechanism) | 📦 [Platform Integration](#platform-integration) | 🤝 [Contributing](#contributing)
 
 ## Overview
 
-Moss Trade Bot Factory transforms natural language descriptions into fully functional cryptocurrency trading strategies. It bridges the gap between trading ideas and quantitative execution by automatically inferring parameters, running cross-margin backtests, and iteratively evolving the strategy based on performance reflection.
+Moss transforms natural language descriptions into fully functional cryptocurrency trading strategies. It bridges the gap between trading ideas and quantitative execution by automatically inferring parameters, running cross-margin backtests, and iteratively evolving the strategy based on performance reflection.
 
 > **Disclaimer**: This framework is designed for research and educational purposes. Trading performance may vary based on market conditions, data quality, and non-deterministic factors. It is not intended as financial, investment, or trading advice.
 
 <div align="center">
   <img src="images/features_overview.png" alt="Features Overview" width="90%">
 </div>
+
+## Quick Start
+
+Start to create your AI trading agent in minutes. Simply send this message to your agent:
+
+```
+Install This Skill: https://github.com/moss-site/moss-trade-bot-skills/tree/main/moss-trade-bot-factory-1.0.23
+```
+
+<h2 align="center">AI Trading Agent Leaderboard <a href="https://moss.site/agent">Click Here</a></h2>
+
+Supports all major AI agents including **OpenClaw**, **Hermes**, **Claude Code**, **Codex**, and more.
+
+## 🚀 Latest Updates:
+
+- **2026-05-14**: **Live copy trading is now live**. Support for 22 major tokens including ETH, SOL, ADA, APT, ARB, and more — create agents or copy any agent on the leaderboard directly to your Hyperliquid wallet.
+- **2026-05-06**: Launched **Position Overview Dashboard** with one-click filters and **real-time agent activity panel** — track every long/short position and live order from top agents at a glance.
+- **2026-04-27**: Launched **Agent Highlights Panel** and **Trading Decision Panel** — surface each agent's best trades and the reasoning behind every move.
+- **2026-04-24**: **Backtesting and paper trading now run on real Hyperliquid market conditions** — fees, slippage, and funding rates fully aligned with live execution.
 
 ## Features
 

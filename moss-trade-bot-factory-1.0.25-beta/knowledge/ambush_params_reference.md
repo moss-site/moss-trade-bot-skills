@@ -80,7 +80,7 @@ LONG 信号（任一满足）:
     （中段动量持续：已经在涨势中，触发是再次发力）
 ```
 
-**8 标杆 sanity 验证**：v0 规则通过 7/8。失败案例 ALPINE（数据和 TNSR 几乎一样但实际假突破）反映规则化方案固有局限 — 仅靠 surge/RSI/change_before_24h 三维度无法区分"假突破"和"暴涨"。**靠仓位层 stop_loss + trailing 兜底**。
+**规则化方案的固有局限**：仅靠 surge/RSI/change_before_24h 三个维度无法在事件触发瞬间区分"假突破"和"真暴涨"（同样的输入特征可能对应完全不同的后续走势）。**靠仓位层 stop_loss + trailing 兜底** — 万一判断错，损失被 stop_loss_pct 封顶。
 
 > ⚠️ 这套规则在 v1 实施完成、积累实盘事件 ≥ 50 后会基于实测数据 review，可能微调阈值。当前是 v0 起步版本。
 
@@ -90,25 +90,25 @@ LONG 信号（任一满足）:
 |------|------|------|------|
 | `leverage` | 1 ~ 3 | 3 | 杠杆。**Hyperliquid 把异动币目标人群（127 / 230 个永续）全部 cap 在 3x**，server 端按 HL meta 强制——无论用户多激进，写超过 3 会被 `validateSourceLeverage` 拒绝。激进度通过 `position_pct` 表达 |
 | `position_pct` | 0.10 ~ 0.50 | 0.20 | 单笔保证金占可用资金比例 |
-| `stop_loss_pct` | 0.05 ~ 0.40 | 0.20 | 硬止损 |
-| `trailing_pct` | 0.05 ~ 0.30 | 0.25 | 移动止盈回撤（做多重在吃趋势，回撤稍宽） |
+| `stop_loss_pct` | 0.05 ~ 0.40 | 0.08 | 硬止损。**2026-05-18 lev=3 sweep 调整**：旧 0.20 在 long 信号失败时拖时间，0.08 让失败入场迅速止损 |
+| `trailing_pct` | 0.05 ~ 0.30 | 0.30 | 移动止盈回撤。**调整**：旧 0.25 → 0.30，让赢家跑得更远（lev=3 sweep top 全部 0.30）|
 | `max_hold_hours` | 6 ~ 168 | 30 | 最长持仓时长。做多典型 1~2 天 |
-| `momentum_bars` | 1 ~ 8 | 2 | 动量确认窗口：等几根 15m K 线（Hyperliquid candleSnapshot），收盘 close 持续 > 触发价才进场 |
+| `momentum_bars` | 0 ~ 8 | 0 | 动量确认窗口：等几根 15m K 线后再开仓。**调整**：旧 2 → 0；sweep 显示 long 信号（`momentum_init` / `momentum_extend`）本身已含确认，再加延迟反而错过 fast move |
 | `cooldown_bars` | 1 ~ 16 | 1 | 平仓后冷却 K 线数。做多冷却短，可立即接力下一波 |
 
-> 做多专用：**momentum_bars** 只在 long 通道有，做空不需要。
+> 做多专用：**momentum_bars** 只在 long 通道有，做空不需要。默认 0 = 不延迟；保留接口给保守用户手动开启。
 
 ## 做空参数（short_params，仅 direction=short 或 balanced 命中 short 规则时生效）
 
 | 字段 | 范围 | 默认 | 含义 |
 |------|------|------|------|
 | `leverage` | 1 ~ 3 | 3 | 杠杆。和做多用同一个 HL cap=3x；做空 odds 高（统计 60% 异动 24h 内回调）但杠杆上限被交易所封死。激进度靠 `position_pct` |
-| `position_pct` | 0.10 ~ 0.50 | 0.30 | 单笔保证金占可用资金比例 |
-| `stop_loss_pct` | 0.05 ~ 0.40 | 0.28 | 硬止损。做空容易瞬间被轧（异动币高位还能再继续轧 30~50%），止损要更宽 |
-| `trailing_pct` | 0.05 ~ 0.30 | 0.28 | 移动止盈回撤 |
-| `max_hold_hours` | 6 ~ 168 | 132 | 最长持仓时长。做空可拿很久（5+ 天）等翻车确认 |
+| `position_pct` | 0.10 ~ 0.50 | 0.20 | 单笔保证金占可用资金比例。**2026-05-18 lev=3 sweep 下调**：旧 0.30，sweep 显示 pp=0.30 下 dd ≈ -70%，下调到 0.20 控 dd 在 -55% 内 |
+| `stop_loss_pct` | 0.05 ~ 0.40 | 0.40 | 硬止损。**调整**：旧 0.28 在异动初始 squeeze 必出局；sweep 1600 top 15 全部用 0.40 |
+| `trailing_pct` | 0.05 ~ 0.30 | 0.25 | 移动止盈回撤。**调整**：旧 0.28 → 0.25，sweep top 区域统一 0.25 |
+| `max_hold_hours` | 6 ~ 168 | 168 | 最长持仓时长。**调整**：旧 132 → 168 (7d)，让 OI 回归走完 |
 | `cooldown_bars` | 1 ~ 16 | 15 | 平仓后冷却 K 线数。做空冷却长，避免反复被轧 + 反弹消耗 |
-| `entry_delay_bars` | 0 ~ 4 | 1 | 入场延迟：触发后先静默 N 根 K 线再开始评估，避免初始 spike 顶部入场 |
+| `entry_delay_bars` | 0 ~ 32 | 16 | 入场延迟：触发后先静默 N 根 K 线再开始评估。**关键调整**：旧 1 → 16 (4h)；sweep 显示 ed=0/4 共 640 组合 0 个赚钱，ed=16 区域几乎全部赚钱 — 异动初始 squeeze tail 必须躲过去 |
 
 > 做空专用：**entry_delay_bars** 只在 short 通道有，做多不需要（做多要快、不需要等顶部）。
 
@@ -155,9 +155,11 @@ ambush bot **同时只允许 1 个持仓**（"单持仓锁"）。已持有 A 币
 
 | 用户描述 | leverage（双向都 3）| position_pct（long / short） |
 |---------|--------------------|-----------------------------|
-| "保守" / "小试" / "稳健" | 3 | 0.15 / 0.20 |
-| 默认 / 未说 | 3 | 0.20 / 0.30 |
-| "激进" / "梭哈" / "抓极端" | 3 | 0.30 / 0.45 |
+| "保守" / "小试" / "稳健" | 3 | 0.15 / 0.15 |
+| 默认 / 未说 | 3 | 0.20 / 0.20 |
+| "激进" / "梭哈" / "抓极端" | 3 | 0.30 / 0.30 |
+
+> ⚠️ 2026-05-18 下调：sweep 显示 short pp≥0.45 在 216 事件上 dd 接近 -100%（单事件即爆仓），aggressive 上限收紧到 0.30；short conservative/default 同步下调一档。long 三档保持不变（dd 可控 ≤ -45%）。
 
 > 如果用户口语描述里出现"几倍杠杆"之类具体数字（哪怕只是"5 倍"），skill 必须主动说明：HL 已经把这些币 cap 在 3 倍，写超过会下不出单。然后落到 3。
 
@@ -167,19 +169,19 @@ ambush bot **同时只允许 1 个持仓**（"单持仓锁"）。已持有 A 币
 defaults = {
     "long_params": {
         "leverage":      3,          # HL cap，强制
-        "stop_loss_pct": 0.20,
-        "trailing_pct":  0.25,
+        "stop_loss_pct": 0.08,       # 2026-05-18 sweep: 旧 0.20 → 0.08（紧 stop 失败快撤）
+        "trailing_pct":  0.30,       # 2026-05-18 sweep: 旧 0.25 → 0.30（让赢家跑）
         "max_hold_hours": 30,
-        "momentum_bars": 2,
+        "momentum_bars": 0,          # 2026-05-18 sweep: 旧 2 → 0（long 信号已含确认）
         "cooldown_bars": 1,
     },
     "short_params": {
         "leverage":         3,       # HL cap，强制
-        "stop_loss_pct":    0.28,
-        "trailing_pct":     0.28,
-        "max_hold_hours":   132,
+        "stop_loss_pct":    0.40,    # 2026-05-18 sweep: 旧 0.28 → 0.40（躲初始 squeeze）
+        "trailing_pct":     0.25,    # 2026-05-18 sweep: 旧 0.28 → 0.25
+        "max_hold_hours":   168,     # 2026-05-18 sweep: 旧 132 → 168 (7d)
         "cooldown_bars":    15,
-        "entry_delay_bars": 1,
+        "entry_delay_bars": 16,      # 2026-05-18 sweep: 旧 1 → 16（4h 关键改动）
     },
     "rhythm": {
         "max_trades_per_event": 1,
@@ -191,7 +193,7 @@ defaults = {
 ### 反追问示例
 
 ❌ 不要这样问："你想保守还是激进？" "做多还是做空？" "杠杆要多少？"
-✅ 直接按推断结果跑回测，sanity check 表给用户看，不满意他自己说要调哪个。
+✅ 直接按推断结果跑回测，把总结 + 最差/最好 N 笔展示给用户，不满意他自己说要调哪个。
 
 ---
 

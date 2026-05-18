@@ -12,8 +12,7 @@ data_cache/ambush/
 ├── features.csv                 # 19 项预算特征
 ├── klines/<base>.csv × 87       # 触发窗口 K 线（剪枝后 ~7MB）
 ├── supply.json
-├── market_cap_snapshot.json
-└── sanity_events.json           # 8 标杆 + 预期方向
+└── market_cap_snapshot.json
 ```
 
 如果缺，跑根目录的一次性迁移脚本：
@@ -27,8 +26,10 @@ python3 scripts/migrate_ambush_data.py
 python3 {baseDir}/scripts/ambush/backtest.py \
   --params /tmp/ambush_params.json \
   --output /tmp/ambush_backtest_result.json \
-  --include-sanity
+  --dump-trades 3
 ```
+
+`--dump-trades 3` 让 backtest 额外打印最差 3 笔 + 最好 3 笔的明细（供用户感性感受 "这种 case 会亏 / 那种 case 会赚"，比单纯看胜率直观）。
 
 `/tmp/ambush_params.json` 由 `propose.py` 上一步产出，**双通道结构**（long_params 和 short_params 各自独立）：
 
@@ -90,24 +91,10 @@ python3 {baseDir}/scripts/ambush/backtest.py \
     "long":  {"count": 25, "win_rate": 0.48, "total_return_pct":  67.4},
     "skip":  {"count": 129, "reason_breakdown": {"momentum_failed": 41, "rule_no_match": 88}}
   },
-  "sanity_check": {
-    "passed": 6,
-    "total":  8,
-    "events": [
-      {
-        "event_id": "event_017",
-        "symbol":   "PEPE/USDT",
-        "trigger_ts": "2025-04-12 08:30",
-        "surge_15m":  0.18,
-        "actual_24h": -0.47,
-        "expected":   "short",
-        "bot_decision": "short",
-        "rule":       "rule_overstretch",
-        "passed":     true
-      },
-      ...
-    ]
-  }
+  "trades": [
+    {"symbol": "PEPE/USDC", "trigger_date": "2025-04-12", "decision": "short", ...},
+    ...
+  ]
 }
 ```
 
@@ -135,24 +122,23 @@ Sharpe:    0.45
   └─ 规则未匹配: 88
 ```
 
-### 3. 8 标杆 Sanity Check 表
+### 3. 最好 / 最差 N 笔（用 --dump-trades N 自动打印）
 
 ```
-event       symbol     surge   actual_24h  expected  bot判决     规则                 ✓/✗
-event_017   PEPE       +18%    -47%        short     short       rule_overstretch     ✓
-event_032   BONK       +12%    +73%        long      skip        momentum_failed      ✗
-event_055   FLOKI      +14%    +5%         skip      skip        rule_no_match        ✓
-event_077   ZEREBRO    +14%    -39%        short     short       rule_overstretch     ✓
-event_103   TST        +25%    +145%       long      long        rule_momentum_init   ✓
-event_118   HIPPO      +35%    -78%        short     short       rule_overstretch     ✓
-event_142   FHE        +9%     +12%        skip      skip        rule_no_match        ✓
-event_188   STO        +16%    -8%         边缘      skip        rule_no_match        ✓
-                                                                通过: 6/8
+=== 最差 3 笔（outlier 排查）===
+symbol           trigger_date  side   rule                             lev   pnl_pct  exit_reason  bars_held
+SOLO/USDC        2025-04-15    short  rule_short_spike_extreme           3    -38.2%  stop_loss            4
+HIPPO/USDC       2025-05-22    short  rule_short_compound_overstretch    3    -28.1%  stop_loss            6
+ZEREBRO/USDC     2025-06-03    long   rule_long_momentum_init            3    -19.5%  trailing             8
+
+=== 最好 3 笔 ===
+symbol           trigger_date  side   rule                             lev   pnl_pct  exit_reason  bars_held
+PEPE/USDC        2025-04-12    short  rule_short_compound_overstretch    3    +52.7%  trailing            22
+TST/USDC         2025-05-01    long   rule_long_momentum_extend          3    +41.3%  max_hold            120
+BONK/USDC        2025-06-14    short  rule_short_spike_extreme           3    +33.8%  trailing            18
 ```
 
-✗ 的事件用户**会注意到**，要他评估：
-- 失败的事件是不是反映 bot 阈值过严/过松？
-- 还是这个事件本身就是个 outlier，不必拟合？
+让用户感性看清楚 "什么 case bot 抓得到 / 什么 case 会亏"。比单纯的胜率数字直观。
 
 ## 调参循环
 
@@ -167,12 +153,12 @@ event_188   STO        +16%    -8%         边缘      skip        rule_no_match
 | "做多回撤太大" | `long_params.stop_loss_pct ↓` 或 `long_params.position_pct ↓`（**只调 long 通道**） |
 | "做空持仓太久" | `short_params.max_hold_hours ↓` |
 | "做多持仓太久" | `long_params.max_hold_hours ↓` |
-| "标杆 ✗ 在 long 那边" | balanced 规则的 long 条件偏严，可手动改 direction=short |
 | "做空冷却期太短，反复被轧" | `short_params.cooldown_bars ↑` |
+| "最差几笔都是 long 那边" | balanced 规则的 long 条件偏严，可手动改 direction=short |
 
 > ⚠️ 调参时**注意是 long_params 还是 short_params**。同样字段名在两个通道里都有，调错通道会调成"反方向"参数。
 
-每次调整重跑一次，对比前后 sanity 表 + 总结。
+每次调整重跑一次，对比前后总结表 + 最差几笔。
 
 ## 失败排查
 
@@ -187,5 +173,5 @@ event_188   STO        +16%    -8%         边缘      skip        rule_no_match
 
 - ❌ Ambush bot **不需要 fingerprint**（majors 是单币 + K 线时段唯一标识；ambush 是事件集合 + 阈值组合，无固定 K 线流）
 - ❌ Ambush bot **不需要 evolve**（参数固化）
-- ❌ Ambush bot **不调用平台 verify**（path 是平台 walk-forward；ambush 用 8 标杆 sanity 替代）
+- ❌ Ambush bot **不调用平台 verify**（path 是平台 walk-forward；ambush 不兼容 — 没有 K 线连续回放语义，server 端用同一份事件 dataset 也无法等价重放）
 - ❌ Ambush bot 上传时 `data_fingerprint.symbol` 写 `null` 或 `"*"`（不绑币）

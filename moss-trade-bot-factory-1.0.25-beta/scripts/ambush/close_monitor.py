@@ -276,6 +276,25 @@ def _evaluate_position(
         # would also drop it (via the next-tick GC), but doing it here
         # avoids re-evaluating the now-flat position before that.
         db.delete_position_state(db_path, symbol)
+        # Record close for downstream rhythm gates (cooldown_bars).
+        # Symbol-to-base mapping: position_state.symbol is the USDC perp
+        # (e.g. "SAGAUSDC"); strip suffix to match event_handler's
+        # gate key (HL base "SAGA").
+        base = symbol[:-4] if symbol.upper().endswith("USDC") else symbol
+        order_id_str = None
+        if isinstance(result, dict):
+            order = result.get("order") or {}
+            if isinstance(order, dict) and order.get("order_id"):
+                order_id_str = str(order["order_id"])
+        try:
+            db.record_symbol_action(
+                db_path, base, "close", order_id=order_id_str,
+            )
+        except Exception as e:
+            logger.warning(
+                "ambush close_monitor: failed to record close action for %s: %s",
+                symbol, e,
+            )
     except Exception as e:
         logger.warning(
             "ambush close_monitor: close failed for %s reason=%s err=%s",

@@ -5,8 +5,8 @@ Ported 1:1 from `internal/ambush/strategy/rule_decision.go` (BalancedDecideV0).
 The skill-side live runner uses this to decide long / short / skip per event.
 
 Keep this in lock-step with the Go version — any rule change to one must
-ship in both. Contract tests on the 8 sanity events live in
-`scripts/ambush/decision_test.py`.
+ship in both. Contract tests on the 8 rule-coverage cases (one per side
+of each rule boundary) live in `scripts/ambush/decision_test.py`.
 """
 
 from __future__ import annotations

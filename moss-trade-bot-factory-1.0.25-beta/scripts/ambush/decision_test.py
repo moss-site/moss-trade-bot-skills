@@ -1,9 +1,14 @@
 """
 Contract tests for `decision.py`.
 
-The 8 sanity cases mirror Go `internal/ambush/strategy/rule_decision_test.go`.
+The 8 rule-coverage cases mirror Go `internal/ambush/strategy/rule_decision_test.go`.
 If either side changes a rule, both tests must move in lock-step or
 production routes will diverge.
+
+(Note: these unit cases are NOT the same thing as the "8 sanity events"
+that used to live in data_cache/ambush/sanity_events.json — that
+integration-level concept was removed 2026-05-17 as redundant with this
+unit test + the 216-event backtest. See the 2026-05-17 design spec.)
 
 Run:
     python3 -m unittest scripts.ambush.decision_test

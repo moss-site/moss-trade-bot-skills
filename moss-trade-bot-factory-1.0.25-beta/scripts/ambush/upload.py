@@ -5,7 +5,8 @@ Ambush bot 上传：直接调 server 端 V2 create_realtime_bot (HMAC)，
 
 设计 §5.1 / §6.3：ambush 没有 K 线连续回放，平台 verify (`/backtest/verify`) 期望
 DecisionParams + 单 symbol K 线 fingerprint，与 ambush 双通道参数 + symbol="*"
-不兼容。8 标杆 sanity check 在 skill 端本地完成，server 端无需另一次 verify。
+不兼容。本地 216 事件回测 + decision unit test 已经覆盖决策正确性 + 统计性能，
+server 端无需另一次 verify。
 
 流程：
   1. 读 ambush_params.json (propose.py 输出) + ambush_backtest_result.json
@@ -72,15 +73,12 @@ def main() -> None:
     if args.backtest_result:
         try:
             bt = json.loads(Path(args.backtest_result).read_text())
-            sn = bt.get("sanity_check", {}) or {}
             sm = bt.get("summary", {}) or {}
             print("[ambush-upload] local backtest summary:")
             print(f"  trades={sm.get('triggered_count', '?')}  "
                   f"win_rate={sm.get('win_rate', '?')}  "
                   f"total_return_pct={sm.get('total_return_pct', '?')}  "
                   f"max_drawdown_pct={sm.get('max_drawdown_pct', '?')}")
-            if sn:
-                print(f"  sanity_check: {sn.get('passed', '?')}/{sn.get('total', '?')} passed")
         except Exception as e:
             print(f"[ambush-upload] WARN: read backtest-result failed: {e}", file=sys.stderr)
 

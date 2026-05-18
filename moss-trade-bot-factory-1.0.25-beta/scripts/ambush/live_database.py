@@ -118,6 +118,27 @@ def init_db(db_path: str) -> None:
             );
             CREATE INDEX IF NOT EXISTS ix_exit_signal_symbol
               ON exit_signal_processed(hl_symbol, received_at);
+
+            -- symbol_action_history: per-symbol open/close audit used by
+            -- `same_coin_dedup_days` (7d window) + `cooldown_bars` (post-close
+            -- N-bar cool-off) + `max_trades_per_event` gates. Records every
+            -- open/close that this skill instance executed; queries look at
+            -- the latest open/close per symbol to decide whether the next
+            -- event should be acted on. event_id is the originating ambush
+            -- event (NULL for closes triggered by exit_signal/close_monitor
+            -- without a clear linkage).
+            CREATE TABLE IF NOT EXISTS symbol_action_history (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                hl_symbol     TEXT NOT NULL,
+                action        TEXT NOT NULL,    -- 'open' | 'close'
+                happened_at   TEXT NOT NULL,    -- ISO-8601 UTC
+                event_id      INTEGER,          -- ambush_event.id (NULL OK for close)
+                order_id      TEXT              -- audit linkage to server order
+            );
+            CREATE INDEX IF NOT EXISTS ix_sym_action_symbol_time
+              ON symbol_action_history(hl_symbol, action, happened_at DESC);
+            CREATE INDEX IF NOT EXISTS ix_sym_action_event_id
+              ON symbol_action_history(event_id);
             """
         )
 
@@ -196,6 +217,29 @@ def record_decision(
             "(event_id, decided_at, decision, reason, order_id, order_status, error_msg) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (event_id, _now_iso(), decision, reason, order_id, order_status, error_msg),
+        )
+
+
+def update_decision_outcome(
+    db_path: str,
+    event_id: int,
+    *,
+    order_id: str | None = None,
+    order_status: str | None = None,
+    error_msg: str | None = None,
+) -> None:
+    """Update the order outcome columns on an existing decision row.
+
+    Used by the deferred-open path: the initial record_decision call writes
+    `order_status='deferred_open'` for dedup, then this UPDATE fills in the
+    real order_id / order_status after the deferred order actually fires.
+    UPDATE only — no insert; if no row exists this is a no-op silently
+    (caller is responsible for having INSERT'd first)."""
+    with get_conn(db_path) as conn:
+        conn.execute(
+            "UPDATE decisions SET order_id = ?, order_status = ?, error_msg = ? "
+            "WHERE event_id = ?",
+            (order_id, order_status, error_msg, event_id),
         )
 
 
@@ -352,3 +396,64 @@ def list_position_states(db_path: str) -> list[dict]:
 def delete_position_state(db_path: str, symbol: str) -> None:
     with get_conn(db_path) as conn:
         conn.execute("DELETE FROM position_state WHERE symbol = ?", (symbol,))
+
+
+# ───── symbol_action_history (dedup / cooldown / per-event trade count) ─────
+
+
+def record_symbol_action(
+    db_path: str,
+    hl_symbol: str,
+    action: str,
+    *,
+    event_id: int | None = None,
+    order_id: str | None = None,
+) -> None:
+    """Append an open/close audit row. Called by event_handler after a
+    successful order placement (open) and by close_monitor/process_exit_signal
+    after a successful close. action ∈ {'open', 'close'}."""
+    if action not in ("open", "close"):
+        raise ValueError(f"invalid action: {action!r}")
+    with get_conn(db_path) as conn:
+        conn.execute(
+            "INSERT INTO symbol_action_history "
+            "(hl_symbol, action, happened_at, event_id, order_id) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (hl_symbol.upper(), action, _now_iso(), event_id, order_id),
+        )
+
+
+def last_action_at(
+    db_path: str, hl_symbol: str, action: str,
+) -> datetime | None:
+    """Return the most recent timestamp the given action happened on the
+    symbol, or None if never. action ∈ {'open', 'close'}."""
+    if action not in ("open", "close"):
+        raise ValueError(f"invalid action: {action!r}")
+    with get_conn(db_path) as conn:
+        row = conn.execute(
+            "SELECT happened_at FROM symbol_action_history "
+            "WHERE hl_symbol = ? AND action = ? "
+            "ORDER BY happened_at DESC LIMIT 1",
+            (hl_symbol.upper(), action),
+        ).fetchone()
+    if not row or not row[0]:
+        return None
+    try:
+        return datetime.fromisoformat(row[0])
+    except (TypeError, ValueError):
+        return None
+
+
+def count_event_trades(db_path: str, event_id: int) -> int:
+    """Number of 'open' actions recorded against this event_id. Used by
+    `max_trades_per_event` gate. Returns 0 if event_id is None/0."""
+    if not event_id:
+        return 0
+    with get_conn(db_path) as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM symbol_action_history "
+            "WHERE event_id = ? AND action = 'open'",
+            (event_id,),
+        ).fetchone()
+    return int(row[0]) if row else 0

@@ -40,8 +40,12 @@ TRIGGER_PRESETS = {
 }
 
 # ---- Long 仓位预设（仓位随激进度变化；杠杆封顶 3x；其他字段固定默认）----
-# 默认值与 ambush_params_reference.md「做多参数」节一致：
-#   stop_loss=0.20, trailing=0.25, max_hold=30h, momentum_bars=2, cooldown=1
+# 2026-05-18 update：lev=3 hardcap 下的 576-combo 真实 K 线回放 sweep
+# (pp × sl × tr × mh × momentum_bars) 显示：
+#   - 紧 stop (sl=0.08) + 宽 trail (tr=0.30) + mb=0 在 216 事件上 sharpe 0.188，
+#     aggressive (pp=0.45) → +850% ret / dd -39%；
+#   - momentum_bars > 0 显著降低收益 (mb=2 -220%, mb=4 -730%)，long 信号已经
+#     过初步确认，再加延迟反而错过 fast move。
 #
 # leverage 不再分档：Hyperliquid 把异动币目标人群（127/230 永续）全部 cap 在 3x，
 # server `ValidateAmbushBotParams` 拒绝 leverage > 3 的参数，`validateSourceLeverage`
@@ -52,27 +56,32 @@ LONG_LEVERAGE_POSITION = {
     "aggressive":   {"leverage": 3, "position_pct": 0.30},
 }
 LONG_FIXED = {
-    "stop_loss_pct":  0.20,
-    "trailing_pct":   0.25,
+    "stop_loss_pct":  0.08,   # 旧 0.20；sweep top 全部使用 0.08，失败入场快速止损
+    "trailing_pct":   0.30,   # 旧 0.25；让赢家跑得更远
     "max_hold_hours": 30,
-    "momentum_bars":  2,
+    "momentum_bars":  0,      # 旧 2；sweep 证明 0 收益最高
     "cooldown_bars":  1,
 }
 
 # ---- Short 仓位预设（同样：杠杆封顶 3，激进度走 position_pct）----
-# 默认值与「做空参数」节一致：
-#   stop_loss=0.28, trailing=0.28, max_hold=132h, cooldown=15, entry_delay=1
+# 2026-05-18 update：lev=3 hardcap 下的 1600-combo 真实 K 线回放 sweep
+# (pp × sl × tr × mh × entry_delay) 显示：
+#   - entry_delay_bars=16 (即 4h) 是决定性改动 — ed=0/4 共 640 组合 0 个赚钱，
+#     ed=16 zone 几乎全部赚钱；异动初始 squeeze tail 必须躲过去；
+#   - 宽 stop (sl=0.40) + 中 trail (tr=0.25) + mh=168h (7d) 是最优结构；
+#   - aggressive (pp=0.30) → +127% ret / dd -70%；继续放大 pp 到 0.45 外推
+#     dd 接近 -100%（单事件即爆仓），故 aggressive 上限下调到 0.30。
 SHORT_LEVERAGE_POSITION = {
-    "conservative": {"leverage": 3, "position_pct": 0.20},
-    "default":      {"leverage": 3, "position_pct": 0.30},
-    "aggressive":   {"leverage": 3, "position_pct": 0.45},
+    "conservative": {"leverage": 3, "position_pct": 0.15},   # 旧 0.20
+    "default":      {"leverage": 3, "position_pct": 0.20},   # 旧 0.30
+    "aggressive":   {"leverage": 3, "position_pct": 0.30},   # 旧 0.45
 }
 SHORT_FIXED = {
-    "stop_loss_pct":    0.28,
-    "trailing_pct":     0.28,
-    "max_hold_hours":   132,
+    "stop_loss_pct":    0.40,   # 旧 0.28；窄 stop 在异动初始 squeeze 必出局
+    "trailing_pct":     0.25,   # 旧 0.28；top 区域统一 0.25
+    "max_hold_hours":   168,    # 旧 132；7d 让回归走完
     "cooldown_bars":    15,
-    "entry_delay_bars": 1,
+    "entry_delay_bars": 16,     # 旧 1；最关键改动 — 4h 延迟让 squeeze 走完
 }
 
 # ---- Rhythm 共享默认（不随激进度变）----

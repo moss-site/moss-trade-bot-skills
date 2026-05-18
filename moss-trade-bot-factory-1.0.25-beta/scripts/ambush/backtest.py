@@ -7,17 +7,16 @@ Ambush bot 事件级本地回测器。
   data_cache/ambush/events.csv     — 216 历史异动事件元数据
   data_cache/ambush/features.csv   — 19 项预算特征（balanced 规则用 RSI/surge/chg）
   data_cache/ambush/klines/<base>.csv — 87 个币种触发窗 K 线
-  data_cache/ambush/sanity_events.json — 8 标杆事件（--include-sanity 用）
 
 输出（JSON）：
   summary       — 总触发数 / 胜率 / 总收益 / 最大回撤 / Sharpe
   per_direction — long / short / skip 各自的笔数 / 胜率 / 收益 / skip 原因细分
-  sanity_check  — 8 标杆每个事件的"期望 vs bot 判决"对照表
+  trades        — 每笔模拟交易的明细（可用 --dump-trades N 打印最差/最好 N 笔）
 
 调用：
   python3 backtest.py --params /tmp/ambush_params.json \
                       --output /tmp/ambush_backtest_result.json \
-                      [--include-sanity] [--data-dir <path>]
+                      [--dump-trades N] [--data-dir <path>]
 """
 
 from __future__ import annotations
@@ -244,28 +243,40 @@ def run_backtest(
             skip_reasons["missing_klines"] = skip_reasons.get("missing_klines", 0) + 1
             continue
 
-        bars_after = klines_after_trigger(klines, ev["trigger_ts"], max_hold_bars)
+        # entry_delay_bars (short) / momentum_bars (long) — both shift entry
+        # by N × 15min after the trigger to let initial squeeze tail run /
+        # confirm momentum. Skill production-side already implements this
+        # via daemon-thread deferred opens (event_handler._run_deferred_open).
+        # Backtest now mirrors it: fetch max_hold + delay bars, then enter
+        # at bars_after[delay].open instead of bars_after[0] price.
+        if decision == "long":
+            delay_bars = int(long_p.get("momentum_bars", 0) or 0)
+            sl, tr, mh_bars = long_p["stop_loss_pct"], long_p["trailing_pct"], long_p["max_hold_hours"] * 4
+            lev = int(long_p["leverage"])
+        else:
+            delay_bars = int(short_p.get("entry_delay_bars", 0) or 0)
+            sl, tr, mh_bars = short_p["stop_loss_pct"], short_p["trailing_pct"], short_p["max_hold_hours"] * 4
+            lev = int(short_p["leverage"])
+
+        bars_after = klines_after_trigger(klines, ev["trigger_ts"], mh_bars + delay_bars)
         if not bars_after:
             skip_reasons["no_klines_after_trigger"] = skip_reasons.get("no_klines_after_trigger", 0) + 1
             continue
+        if len(bars_after) <= delay_bars:
+            skip_reasons["insufficient_klines_after_delay"] = skip_reasons.get("insufficient_klines_after_delay", 0) + 1
+            continue
 
-        # 选 long / short 仓位参数
+        # Shift entry by delay_bars: use the OPEN of bars_after[delay_bars]
+        # as new entry price (mirrors skill behavior — order fires at market
+        # after delay completes).
+        delayed_bars = bars_after[delay_bars:]
+        entry_price = delayed_bars[0]["open"] if delay_bars > 0 else ev["trigger_price"]
+        outcome = simulate_position(delayed_bars, entry_price, decision, lev, sl, tr, mh_bars)
         if decision == "long":
-            outcome = simulate_position(
-                bars_after, ev["trigger_price"], "long",
-                long_p["leverage"], long_p["stop_loss_pct"],
-                long_p["trailing_pct"], long_p["max_hold_hours"] * 4,
-            )
             position_pct = float(long_p["position_pct"])
-            leverage = int(long_p["leverage"])
         else:
-            outcome = simulate_position(
-                bars_after, ev["trigger_price"], "short",
-                short_p["leverage"], short_p["stop_loss_pct"],
-                short_p["trailing_pct"], short_p["max_hold_hours"] * 4,
-            )
             position_pct = float(short_p["position_pct"])
-            leverage = int(short_p["leverage"])
+        leverage = lev
         trades.append({
             "base": ev["base"],
             "symbol": ev["symbol"],
@@ -366,62 +377,12 @@ def _aggregate(decisions: list, trades: list, skip_reasons: dict) -> dict:
     return {"summary": summary, "per_direction": per_direction}
 
 
-# ===== 8 标杆 sanity check =====
-
-def run_sanity(events_df: pd.DataFrame, params: dict, data_dir: Path) -> dict:
-    sanity_path = data_dir / "sanity_events.json"
-    if not sanity_path.exists():
-        return {"error": "sanity_events.json not found", "events": []}
-
-    sanity = json.loads(sanity_path.read_text())
-    results = []
-    for benchmark in sanity["events"]:
-        # 从 events_df 找匹配的事件
-        match = events_df[
-            (events_df["symbol"] == benchmark["symbol"])
-            & (events_df["trigger_date"] == benchmark["trigger_date"])
-        ]
-        if match.empty:
-            results.append({**benchmark, "bot_decision": "not_found", "passed": False})
-            continue
-        ev_row = match.iloc[0]
-        ev = {
-            "oi_mc": float(ev_row["oi_mc"]),
-            "surge_15m": float(ev_row["surge_15m"]),
-            "rsi_14": float(ev_row["rsi_14"]) if pd.notna(ev_row.get("rsi_14")) else 50.0,
-            "change_before_24h_pct": float(ev_row["change_before_24h_pct"]),
-        }
-        decision, reason = decide_for_event(ev, params)
-        expected = benchmark["expected_direction"]
-        passed = (decision == expected) or (expected == "any")
-        results.append({
-            "event_id": benchmark["event_id"],
-            "symbol": benchmark["symbol"],
-            "trigger_date": benchmark["trigger_date"],
-            "surge_15m": benchmark["surge_15m"],
-            "rsi_14": benchmark["rsi_14"],
-            "change_before_24h_pct": benchmark["change_before_24h_pct"],
-            "actual_return_24h_pct": benchmark["actual_return_24h_pct"],
-            "expected_direction": expected,
-            "bot_decision": decision,
-            "rule": reason,
-            "passed": passed,
-            "category": benchmark["category"],
-        })
-    passed_count = sum(1 for r in results if r["passed"])
-    return {
-        "passed": passed_count, "total": len(results),
-        "events": results,
-    }
-
-
 # ===== main =====
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--params", required=True, help="ambush bot 参数 JSON 路径")
     p.add_argument("--output", required=True, help="回测结果输出 JSON 路径")
-    p.add_argument("--include-sanity", action="store_true", help="跑 8 标杆 sanity check")
     p.add_argument("--data-dir", default=str(DEFAULT_DATA_DIR), help="data_cache/ambush 路径")
     p.add_argument("--dump-trades", type=int, default=0, metavar="N",
                    help="额外打印最差 N 笔 + 最好 N 笔交易明细（用于查 outlier）。"
@@ -442,10 +403,6 @@ def main() -> None:
     print(f"[backtest] running event-level backtest ...")
     result = run_backtest(events_df, params, data_dir)
 
-    if args.include_sanity:
-        print(f"[backtest] running 8-benchmark sanity check ...")
-        result["sanity_check"] = run_sanity(events_df, params, data_dir)
-
     Path(args.output).write_text(json.dumps(result, indent=2, ensure_ascii=False))
 
     s = result["summary"]
@@ -454,18 +411,6 @@ def main() -> None:
     print(f"胜率: {s['win_rate']*100:.1f}%  总收益: {s['total_return_pct']:+.1f}%  "
           f"avg/笔: {s['avg_pnl_pct']:+.2f}%")
     print(f"最大回撤: {s['max_drawdown_pct']:.1f}%  Sharpe: {s['sharpe']:.3f}")
-
-    if args.include_sanity:
-        sn = result["sanity_check"]
-        print(f"\n=== 8 标杆 Sanity Check ===")
-        print(f"通过: {sn['passed']}/{sn['total']}")
-        for ev in sn["events"]:
-            mark = "✓" if ev["passed"] else "✗"
-            print(f"  {mark} [{ev['category']:>20}] {ev['symbol']:>15} "
-                  f"surge={ev['surge_15m']*100:5.1f}% "
-                  f"actual_24h={ev['actual_return_24h_pct']:+6.1f}% "
-                  f"expected={ev['expected_direction']:<6} "
-                  f"bot={ev['bot_decision']:<6} ({ev['rule']})")
 
     if args.dump_trades > 0 and result.get("trades"):
         N = args.dump_trades

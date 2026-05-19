@@ -727,7 +727,11 @@ def resume_deferred_opens(handler: EventHandler, db_path: str) -> int:
             continue
 
         target_symbol = sym if sym.endswith("USDC") else f"{sym}USDC"
-        client_order_id = f"ambush-{event_id}-deferred"
+        # Must match the formula used in process_event first-fire path:
+        # `f"ambush-{event_id}"`. If a crash happens mid-POST on first
+        # fire and we resume here, server-side idempotency on this
+        # client_order_id is the only thing preventing a double-open.
+        client_order_id = f"ambush-{event_id}"
         reasoning_zh, reasoning_en = _build_reasoning(event, decision)
         delay_seconds = max(0.0, (due_at - now).total_seconds())
         threading.Thread(
@@ -992,7 +996,14 @@ def process_event(
             handler.client.symbol = prev_symbol
             return
 
-        client_order_id = f"ambush-{event_id}-{int(time.time())}"
+        # Deterministic, event-derived client_order_id. Critically this is
+        # the SAME formula used by `resume_deferred_opens` on restart
+        # (`f"ambush-{event_id}-deferred"` historically diverged for the
+        # deferred path — a crash mid-POST then re-fired at resume with a
+        # different id, bypassing server-side idempotency and double-opening
+        # the position). Tying the id to event_id alone keeps it reproducible
+        # across processes.
+        client_order_id = f"ambush-{event_id}"
         reasoning_zh, reasoning_en = _build_reasoning(event, decision)
 
         # ── Entry-delay (LONG: momentum_bars, SHORT: entry_delay_bars) ──
@@ -1029,20 +1040,20 @@ def process_event(
                 delay_seconds, delay_param_name, delay_bars,
             )
             due_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
-            # Queue first, then write the decision row that makes this event
-            # processed. If the process dies in between, replay can recreate
-            # the same queue row via ON CONFLICT instead of leaving a
-            # deferred_open decision without a resumable due time.
-            db.enqueue_deferred_open(
+            # Atomic enqueue + decision in a single SQLite txn — if the
+            # process dies between the queue write and the decision write,
+            # `list_pending_deferred_opens`'s INNER JOIN would silently
+            # filter the orphan queue row out forever. The combined helper
+            # commits both or neither so resume always observes a
+            # consistent (queue, decision) pair.
+            db.enqueue_deferred_open_with_decision(
                 db_path,
                 event_id=event_id,
                 due_at=due_at.isoformat(),
                 delay_param_name=delay_param_name,
                 delay_bars=delay_bars,
-            )
-            db.record_decision(
-                db_path, event_id, decision.side, decision.reason,
-                order_status="deferred_open",
+                decision=decision.side,
+                reason=decision.reason,
                 error_msg=f"deferred {delay_seconds}s ({delay_param_name}={delay_bars} bars)",
             )
             db.mark_event_synced(db_path, event_id)

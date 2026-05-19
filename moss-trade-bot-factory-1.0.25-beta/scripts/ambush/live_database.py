@@ -294,6 +294,60 @@ def enqueue_deferred_open(
         )
 
 
+def enqueue_deferred_open_with_decision(
+    db_path: str,
+    *,
+    event_id: int,
+    due_at: str,
+    delay_param_name: str,
+    delay_bars: int,
+    decision: str,
+    reason: str,
+    error_msg: str | None,
+) -> None:
+    """Atomic enqueue + record_decision for the deferred-open path.
+
+    Before this helper existed the caller did two separate write txns:
+    `enqueue_deferred_open(...)` then `record_decision(..., 'deferred_open')`.
+    A process crash between them produced an orphan queue row that
+    `list_pending_deferred_opens` filtered out forever (its INNER JOIN
+    requires the matching deferred_open decision row). The orphan would
+    never be resumed and the deferred order would silently disappear.
+
+    The single-transaction wrapper preserves the dedup invariant:
+    callers that retry must end up with at-most-one (queue, decision)
+    pair per event_id — the INSERT OR IGNORE on decisions + ON CONFLICT
+    on deferred_opens both no-op on duplicate, and they no-op together
+    or not at all.
+    """
+    now = _now_iso()
+    with get_conn(db_path) as conn:
+        with conn:  # implicit BEGIN..COMMIT for the inner block
+            conn.execute(
+                """
+                INSERT INTO deferred_opens (
+                    event_id, due_at, delay_param_name, delay_bars,
+                    status, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, 'pending', ?, ?)
+                ON CONFLICT(event_id) DO UPDATE SET
+                    due_at=excluded.due_at,
+                    delay_param_name=excluded.delay_param_name,
+                    delay_bars=excluded.delay_bars,
+                    status='pending',
+                    updated_at=excluded.updated_at,
+                    last_error=NULL
+                """,
+                (int(event_id), due_at, delay_param_name, int(delay_bars), now, now),
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO decisions "
+                "(event_id, decided_at, decision, reason, order_id, order_status, error_msg) "
+                "VALUES (?, ?, ?, ?, NULL, 'deferred_open', ?)",
+                (int(event_id), now, decision, reason, error_msg),
+            )
+
+
 def mark_deferred_open_running(db_path: str, event_id: int) -> None:
     with get_conn(db_path) as conn:
         conn.execute(

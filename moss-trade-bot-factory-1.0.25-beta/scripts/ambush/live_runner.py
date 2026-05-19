@@ -26,9 +26,10 @@ Optional fields:
   ambush_params (dict) — bot's direction + leverage + position_pct;
                           falls back to params-file / defaults.
 
-The runner is stateless across restarts — all per-event state lives
-in the SQLite file at `--db`. Killing + restarting picks up where it
-left off via the cursor on first bootstrap.
+The runner is restart-safe for processed events, exit signals, and
+deferred opens — all per-event state lives in the SQLite file at `--db`.
+Killing + restarting picks up where it left off via the cursor on first
+bootstrap and re-spawns pending deferred opens.
 """
 
 from __future__ import annotations
@@ -114,6 +115,14 @@ async def _main_async(args: argparse.Namespace) -> int:
     db.init_db(db_path)
     logger.info("ambush runner: db=%s cursor=%d direction=%s",
                 db_path, db.get_last_event_id_seen(db_path), direction)
+    action_history_http = None
+    if args.action_history_port > 0:
+        from ambush import action_history_server
+        action_history_http = action_history_server.start(
+            db_path,
+            host=args.action_history_host,
+            port=args.action_history_port,
+        )
 
     # Single TradingClient handles both account/order RPC and serves as
     # the HMAC signer baseline for AmbushClient's REST + WS endpoints.
@@ -127,6 +136,7 @@ async def _main_async(args: argparse.Namespace) -> int:
     )
     ac = ambush_client.AmbushClient(tc, bot_id=bot_id)
     handler = event_handler.EventHandler(tc, ambush_params)
+    event_handler.resume_deferred_opens(handler, db_path)
 
     # Lifecycle.
     stop_event = asyncio.Event()
@@ -170,6 +180,9 @@ async def _main_async(args: argparse.Namespace) -> int:
     try:
         await asyncio.gather(ws_task, poll_task, close_task, return_exceptions=True)
     finally:
+        if action_history_http is not None:
+            action_history_http.shutdown()
+            action_history_http.server_close()
         logger.info("ambush runner: stopped")
     return 0
 
@@ -196,6 +209,14 @@ def main() -> int:
     parser.add_argument(
         "--close-tick-seconds", type=int, default=30,
         help="Close monitor tick in seconds (trailing/max_hold check; default 30)",
+    )
+    parser.add_argument(
+        "--action-history-host", default="127.0.0.1",
+        help="Host for optional local /symbol-action-history REST (default 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--action-history-port", type=int, default=0,
+        help="Port for optional local /symbol-action-history REST; 0 disables it",
     )
     parser.add_argument(
         "--log-level", default="INFO",

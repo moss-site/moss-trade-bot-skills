@@ -139,6 +139,25 @@ def init_db(db_path: str) -> None:
               ON symbol_action_history(hl_symbol, action, happened_at DESC);
             CREATE INDEX IF NOT EXISTS ix_sym_action_event_id
               ON symbol_action_history(event_id);
+
+            -- deferred_opens: crash-safe queue for long momentum_bars /
+            -- short entry_delay_bars. A decision row with
+            -- order_status='deferred_open' dedupes event processing; this
+            -- table preserves the due time so a restarted live_runner can
+            -- re-spawn the delayed open instead of losing it with the old
+            -- daemon-thread-only implementation.
+            CREATE TABLE IF NOT EXISTS deferred_opens (
+                event_id          INTEGER PRIMARY KEY REFERENCES events(event_id),
+                due_at            TEXT NOT NULL,
+                delay_param_name  TEXT NOT NULL,
+                delay_bars        INTEGER NOT NULL,
+                status            TEXT NOT NULL DEFAULT 'pending',
+                created_at        TEXT NOT NULL,
+                updated_at        TEXT NOT NULL,
+                last_error        TEXT
+            );
+            CREATE INDEX IF NOT EXISTS ix_deferred_opens_status_due
+              ON deferred_opens(status, due_at);
             """
         )
 
@@ -241,6 +260,104 @@ def update_decision_outcome(
             "WHERE event_id = ?",
             (order_id, order_status, error_msg, event_id),
         )
+
+
+# ───── deferred opens ─────
+
+
+def enqueue_deferred_open(
+    db_path: str,
+    *,
+    event_id: int,
+    due_at: str,
+    delay_param_name: str,
+    delay_bars: int,
+) -> None:
+    now = _now_iso()
+    with get_conn(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO deferred_opens (
+                event_id, due_at, delay_param_name, delay_bars,
+                status, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, 'pending', ?, ?)
+            ON CONFLICT(event_id) DO UPDATE SET
+                due_at=excluded.due_at,
+                delay_param_name=excluded.delay_param_name,
+                delay_bars=excluded.delay_bars,
+                status='pending',
+                updated_at=excluded.updated_at,
+                last_error=NULL
+            """,
+            (int(event_id), due_at, delay_param_name, int(delay_bars), now, now),
+        )
+
+
+def mark_deferred_open_running(db_path: str, event_id: int) -> None:
+    with get_conn(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE deferred_opens
+               SET status='running', updated_at=?
+             WHERE event_id=?
+            """,
+            (_now_iso(), int(event_id)),
+        )
+
+
+def mark_deferred_open_done(
+    db_path: str,
+    event_id: int,
+    *,
+    status: str,
+    error_msg: str | None = None,
+) -> None:
+    with get_conn(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE deferred_opens
+               SET status=?, updated_at=?, last_error=?
+             WHERE event_id=?
+            """,
+            (status, _now_iso(), error_msg, int(event_id)),
+        )
+
+
+def list_pending_deferred_opens(db_path: str, limit: int = 100) -> list[dict]:
+    """Return pending/running deferred opens that still have a deferred decision.
+
+    `running` is included intentionally: after a process crash while the
+    daemon thread was sleeping, the row may be left running forever. Startup
+    recovery should treat it as resumable.
+    """
+    with get_conn(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT q.event_id, q.due_at, q.delay_param_name, q.delay_bars,
+                   e.raw_payload, d.decision, d.reason
+              FROM deferred_opens q
+              JOIN events e ON e.event_id = q.event_id
+              JOIN decisions d ON d.event_id = q.event_id
+             WHERE q.status IN ('pending', 'running')
+               AND d.order_status = 'deferred_open'
+          ORDER BY q.due_at ASC, q.event_id ASC
+             LIMIT ?
+            """,
+            (int(limit),),
+        ).fetchall()
+    return [
+        {
+            "event_id": int(r[0]),
+            "due_at": r[1],
+            "delay_param_name": r[2],
+            "delay_bars": int(r[3]),
+            "event": json.loads(r[4]),
+            "decision": r[5],
+            "reason": r[6],
+        }
+        for r in rows
+    ]
 
 
 # ───── state (cursor / misc) ─────
@@ -457,3 +574,52 @@ def count_event_trades(db_path: str, event_id: int) -> int:
             (event_id,),
         ).fetchone()
     return int(row[0]) if row else 0
+
+
+def list_symbol_action_history(
+    db_path: str,
+    *,
+    hl_symbol: str | None = None,
+    action: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    """Return recent local open/close audit rows for operational inspection."""
+    if action is not None and action not in ("open", "close"):
+        raise ValueError(f"invalid action: {action!r}")
+    limit = max(1, min(int(limit or 100), 500))
+
+    where: list[str] = []
+    args: list[Any] = []
+    if hl_symbol:
+        where.append("hl_symbol = ?")
+        args.append(str(hl_symbol).upper())
+    if action:
+        where.append("action = ?")
+        args.append(action)
+    where_sql = ""
+    if where:
+        where_sql = "WHERE " + " AND ".join(where)
+    args.append(limit)
+
+    with get_conn(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, hl_symbol, action, happened_at, event_id, order_id
+              FROM symbol_action_history
+              {where_sql}
+          ORDER BY happened_at DESC, id DESC
+             LIMIT ?
+            """,
+            tuple(args),
+        ).fetchall()
+    return [
+        {
+            "id": int(r[0]),
+            "hl_symbol": r[1],
+            "action": r[2],
+            "happened_at": r[3],
+            "event_id": int(r[4]) if r[4] is not None else None,
+            "order_id": r[5],
+        }
+        for r in rows
+    ]

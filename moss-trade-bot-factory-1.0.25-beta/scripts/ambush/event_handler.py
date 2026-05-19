@@ -45,7 +45,7 @@ import logging
 import threading
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -71,6 +71,7 @@ logger = logging.getLogger("ambush.handler")
 # state that doesn't decay (oi_revert/max_hold are still meaningful at
 # emit-time even if delivery is delayed).
 _DETECTED_SIGNAL_STALE_AFTER_SECONDS = 15 * 60  # 15 min = 1 K-line cycle
+_DEFERRED_OPEN_MAX_LATE_SECONDS = 15 * 60
 
 
 # Server returns these HTTP-translated error codes when the bot is
@@ -194,14 +195,20 @@ def _parse_trigger_ts(event: dict) -> datetime | None:
     raw = event.get("trigger_ts")
     if not raw:
         return None
+    return _parse_iso_utc(raw)
+
+
+def _parse_iso_utc(raw: Any) -> datetime | None:
+    if not raw:
+        return None
     try:
-        normalized = str(raw).strip()
-        if normalized.endswith("Z"):
-            normalized = normalized[:-1] + "+00:00"
-        dt = datetime.fromisoformat(normalized)
+        text = str(raw).strip()
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        dt = datetime.fromisoformat(text)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        return dt
+        return dt.astimezone(timezone.utc)
     except (TypeError, ValueError):
         return None
 
@@ -599,6 +606,7 @@ def _run_deferred_open(
     No re-evaluation of the decision after the delay — see process_event
     comments for rationale and v2 plan."""
     try:
+        db.mark_deferred_open_running(db_path, event_id)
         time.sleep(delay_seconds)
         logger.info(
             "ambush handler: deferred-open firing event_id=%d sym=%s side=%s "
@@ -640,6 +648,9 @@ def _run_deferred_open(
                     "ambush handler: deferred-open failed to record action for event_id=%d: %s",
                     event_id, e,
                 )
+            db.mark_deferred_open_done(db_path, event_id, status="completed")
+        else:
+            db.mark_deferred_open_done(db_path, event_id, status=status, error_msg=err)
     except Exception as e:
         logger.exception(
             "ambush handler: deferred-open thread crashed for event_id=%d: %s",
@@ -650,8 +661,87 @@ def _run_deferred_open(
                 db_path, event_id,
                 order_status="deferred_failed", error_msg=str(e),
             )
+            db.mark_deferred_open_done(
+                db_path, event_id, status="failed", error_msg=str(e),
+            )
         except Exception:
             pass
+
+
+def resume_deferred_opens(handler: EventHandler, db_path: str) -> int:
+    """Re-spawn deferred opens left by a previous live_runner process.
+
+    Old implementation used only daemon threads; restart during the sleep
+    window left decisions stuck at `order_status='deferred_open'` forever.
+    The SQLite queue lets startup recreate the remaining wait. If a due time
+    is already more than one K-line late, expire it instead of opening on a
+    stale delayed signal.
+    """
+    resumed = 0
+    for row in db.list_pending_deferred_opens(db_path):
+        event_id = int(row["event_id"])
+        event = row["event"]
+        due_at = _parse_iso_utc(row.get("due_at"))
+        if due_at is None:
+            db.update_decision_outcome(
+                db_path, event_id,
+                order_status="deferred_failed", error_msg="invalid deferred due_at",
+            )
+            db.mark_deferred_open_done(
+                db_path, event_id, status="failed", error_msg="invalid due_at",
+            )
+            continue
+
+        now = datetime.now(timezone.utc)
+        late_by = (now - due_at).total_seconds()
+        if late_by > _DEFERRED_OPEN_MAX_LATE_SECONDS:
+            msg = f"deferred open expired, late_by={_format_seconds(late_by)}"
+            logger.warning("ambush handler: deferred-open event_id=%d expired: %s", event_id, msg)
+            db.update_decision_outcome(
+                db_path, event_id,
+                order_status="deferred_expired", error_msg=msg,
+            )
+            db.mark_deferred_open_done(db_path, event_id, status="expired", error_msg=msg)
+            continue
+
+        decision = decision_mod.Decision(str(row["decision"]), str(row["reason"]))
+        notional = handler._compute_notional(decision.side)
+        leverage = handler._leverage_for(decision.side)
+        if notional <= 0:
+            msg = "notional_zero during deferred resume"
+            db.update_decision_outcome(
+                db_path, event_id,
+                order_status="rejected", error_msg=msg,
+            )
+            db.mark_deferred_open_done(db_path, event_id, status="rejected", error_msg=msg)
+            continue
+
+        sym = str(event.get("hl_symbol") or "").strip().upper()
+        if not sym:
+            msg = "empty_symbol during deferred resume"
+            db.update_decision_outcome(
+                db_path, event_id,
+                order_status="rejected", error_msg=msg,
+            )
+            db.mark_deferred_open_done(db_path, event_id, status="rejected", error_msg=msg)
+            continue
+
+        target_symbol = sym if sym.endswith("USDC") else f"{sym}USDC"
+        client_order_id = f"ambush-{event_id}-deferred"
+        reasoning_zh, reasoning_en = _build_reasoning(event, decision)
+        delay_seconds = max(0.0, (due_at - now).total_seconds())
+        threading.Thread(
+            target=_run_deferred_open,
+            args=(handler, db_path, event_id, decision, target_symbol,
+                  notional, leverage, client_order_id,
+                  reasoning_zh, reasoning_en, delay_seconds, sym),
+            daemon=True,
+            name=f"ambush-defer-resume-{event_id}",
+        ).start()
+        resumed += 1
+    if resumed:
+        logger.info("ambush handler: resumed %d deferred open(s)", resumed)
+    return resumed
 
 
 def process_event(
@@ -938,11 +1028,18 @@ def process_event(
                 _format_event_brief(event), decision.side, decision.reason,
                 delay_seconds, delay_param_name, delay_bars,
             )
-            # Record decision NOW with status='deferred_open' so dedup
-            # (is_event_processed → has decision row → short-circuits)
-            # prevents re-spawn on bootstrap replay. Background thread
-            # will UPDATE the row's order_id/status after the deferred
-            # open completes.
+            due_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
+            # Queue first, then write the decision row that makes this event
+            # processed. If the process dies in between, replay can recreate
+            # the same queue row via ON CONFLICT instead of leaving a
+            # deferred_open decision without a resumable due time.
+            db.enqueue_deferred_open(
+                db_path,
+                event_id=event_id,
+                due_at=due_at.isoformat(),
+                delay_param_name=delay_param_name,
+                delay_bars=delay_bars,
+            )
             db.record_decision(
                 db_path, event_id, decision.side, decision.reason,
                 order_status="deferred_open",
@@ -953,11 +1050,9 @@ def process_event(
             handler.client.symbol = prev_symbol
             # Spawn daemon thread for the actual deferred open. Thread can
             # be long-lived: 2026-05-18 sweep recommends entry_delay_bars=16
-            # (4h) as default; upper bound now 32 bars (8h). NOT crash-safe:
-            # skill restart loses pending deferred opens (the decision row
-            # remains as 'deferred_open' for audit, but no order fires).
-            # Documented in design doc Open Issues; v2 fix is a persistent
-            # deferred-opens queue.
+            # (4h) as default; upper bound now 32 bars (8h). The SQLite
+            # deferred_opens row above lets live_runner restart re-spawn
+            # any still-deferred order.
             threading.Thread(
                 target=_run_deferred_open,
                 args=(handler, db_path, event_id, decision, target_symbol,

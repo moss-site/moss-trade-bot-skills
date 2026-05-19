@@ -122,9 +122,10 @@ LONG 信号（任一满足）:
 > 💾 **节奏 gate 的实现位置**：以上 3 个 rhythm 字段（`max_trades_per_event` / `same_coin_dedup_days` / 各方向的 `cooldown_bars`）由 **skill 侧** `event_handler.py` 在决策后 / 下单前强制执行，状态存在 skill 本地 SQLite `~/.moss-trade-bot/ambush_state.db` 的 `symbol_action_history` 表（schema 见 `scripts/ambush/live_database.py`）。
 >
 > server 端**不**拦这 3 项 — 因此这些字段：
-> 1. **不在 `/api/v2` 任何端点暴露**：要审计「这个 bot 在 SAGA 上最近 7 天开过几次」请直接 `sqlite3 ~/.moss-trade-bot/ambush_state.db 'SELECT * FROM symbol_action_history WHERE hl_symbol="SAGA" ORDER BY id DESC LIMIT 20'`，或者退回看 server 侧的 `/api/v2/.../orders` 全量订单流。
+> 1. **不在 server `/api/v2` 端点暴露**：要审计「这个 bot 在 SAGA 上最近 7 天开过几次」，可启动 skill 本地只读 REST：`python -m ambush.live_runner ... --action-history-port 8765`，然后查 `GET http://127.0.0.1:8765/symbol-action-history?symbol=SAGA&limit=20`；也可直接 `sqlite3 ~/.moss-trade-bot/ambush_state.db 'SELECT * FROM symbol_action_history WHERE hl_symbol="SAGA" ORDER BY id DESC LIMIT 20'`，或者退回看 server 侧的 `/api/v2/.../orders` 全量订单流。
 > 2. **skill 重启后历史保留**：SQLite 路径默认在 `~/.moss-trade-bot/`，跨 live_runner 进程重启不丢。
 > 3. **server 端的兜底是 `enforceAmbushPositionLock`**（仓位锁）：即便 skill 本地节奏 gate 全部失效，也不会出现「同 bot 多持仓」。但「同币 7 天内不要再开」这种纯节奏约束是 skill-only。
+> 4. **deferred open 可恢复**：`momentum_bars` / `entry_delay_bars` 产生的延迟开仓写入 SQLite `deferred_opens` 表；live_runner 重启会重新挂起未完成的延迟开仓，若已超过 due time 15 分钟则标记 `deferred_expired`，避免很晚才追单。
 
 ## 不同 direction 下的参数生效范围
 

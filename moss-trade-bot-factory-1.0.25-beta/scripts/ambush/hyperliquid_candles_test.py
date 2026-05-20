@@ -92,6 +92,24 @@ class TestFetch(unittest.TestCase):
         for i in range(1, len(bars)):
             self.assertGreater(bars[i]["ts"], bars[i - 1]["ts"])
 
+    @patch("ambush.hyperliquid_candles._urlopen")
+    def test_limit_trims_when_hl_returns_more(self, mock_urlopen):
+        # HL returns 10 bars but caller only wants 5 — must get the most recent 5.
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = _fake_hl_response(n=10)
+        mock_urlopen.return_value.__enter__.return_value = mock_resp
+        bars = hc.fetch("SAGA", interval="15m", limit=5)
+        self.assertEqual(len(bars), 5)
+        # After sort+trim we keep indices 5..9 (most recent); index 5 has open=105.0.
+        self.assertEqual(bars[0]["open"], 105.0)
+
+    @patch("ambush.hyperliquid_candles._urlopen")
+    def test_url_error_raises(self, mock_urlopen):
+        import urllib.error
+        mock_urlopen.side_effect = urllib.error.URLError("DNS failure")
+        with self.assertRaises(hc.HyperliquidCandleError):
+            hc.fetch("SAGA", interval="15m", limit=3)
+
 
 if __name__ == "__main__":
     unittest.main()

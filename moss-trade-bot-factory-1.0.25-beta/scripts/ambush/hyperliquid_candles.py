@@ -37,6 +37,11 @@ def fetch(symbol: str, interval: str = _DEFAULT_INTERVAL, limit: int = 96,
 
     Caller must catch HyperliquidCandleError and fall back to snapshot
     behaviour — this function never returns a partial result on failure.
+
+    Programming errors (bad `interval` or non-positive `limit`) raise
+    `ValueError` — these indicate caller bugs and are not catchable through
+    the normal HL-failure fallback path. Only `HyperliquidCandleError`
+    should be caught for runtime degradation.
     """
     if interval != _DEFAULT_INTERVAL:
         # Other intervals are valid HL inputs but ambush only uses 15m.
@@ -97,7 +102,7 @@ def fetch(symbol: str, interval: str = _DEFAULT_INTERVAL, limit: int = 96,
     return bars
 
 
-def _normalize(entry: dict[str, Any], symbol: str) -> dict:
+def _normalize(entry: dict[str, Any], symbol: str) -> dict[str, Any]:
     try:
         ts_ms = int(entry["t"])
         return {

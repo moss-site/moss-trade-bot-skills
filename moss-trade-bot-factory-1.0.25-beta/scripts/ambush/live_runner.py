@@ -135,7 +135,10 @@ async def _main_async(args: argparse.Namespace) -> int:
         symbol="BTCUSDC",  # placeholder; per-event override happens later
     )
     ac = ambush_client.AmbushClient(tc, bot_id=bot_id)
-    handler = event_handler.EventHandler(tc, ambush_params)
+    handler = event_handler.EventHandler(
+        tc, ambush_params,
+        kline_driven_open=args.kline_driven_open,
+    )
     event_handler.resume_deferred_opens(handler, db_path)
 
     # Lifecycle.
@@ -172,11 +175,16 @@ async def _main_async(args: argparse.Namespace) -> int:
         close_monitor.run_close_monitor(
             tc, db_path, ambush_params, stop_event,
             tick_seconds=args.close_tick_seconds,
+            kline_driven=args.kline_driven_close,
         ),
         name="ambush-close-monitor",
     )
 
-    logger.info("ambush runner: started ws+poller+close_monitor, awaiting events")
+    logger.info(
+        "ambush runner: started ws+poller+close_monitor "
+        "(kline_open=%s kline_close=%s), awaiting events",
+        args.kline_driven_open, args.kline_driven_close,
+    )
     try:
         await asyncio.gather(ws_task, poll_task, close_task, return_exceptions=True)
     finally:
@@ -209,6 +217,18 @@ def main() -> int:
     parser.add_argument(
         "--close-tick-seconds", type=int, default=15 * 60,
         help="Close monitor tick in seconds (trailing/max_hold check; default 900 = 15min)",
+    )
+    parser.add_argument(
+        "--kline-driven-open", action="store_true", default=False,
+        help="Recompute (surge_15m, rsi_14, chg_24h_pct) from fresh K-lines on every "
+             "event (incl. deferred-open wake), re-run balanced_decide_v0 against the "
+             "fresh values. Disable to keep event-envelope snapshot semantics.",
+    )
+    parser.add_argument(
+        "--kline-driven-close", action="store_true", default=False,
+        help="close_monitor uses 4-priority cascade (ATR stop / max_hold / K-line "
+             "trailing / signal_reverse). Disable to keep intratick-mark trailing "
+             "+ fixed stop_loss_pct semantics.",
     )
     parser.add_argument(
         "--action-history-host", default="127.0.0.1",

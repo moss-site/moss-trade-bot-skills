@@ -160,6 +160,15 @@ def init_db(db_path: str) -> None:
               ON deferred_opens(status, due_at);
             """
         )
+        # Additive migration (2026-05-20): recompute audit columns. SQLite
+        # silently errors on ALTER TABLE if the column already exists, so
+        # guard with PRAGMA table_info to make re-init idempotent.
+        existing_cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(decisions)")
+        }
+        for col in ("recompute_surge_15m", "recompute_rsi_14", "recompute_chg_24h_pct"):
+            if col not in existing_cols:
+                conn.execute(f"ALTER TABLE decisions ADD COLUMN {col} REAL")
 
 
 # ───── events ─────
@@ -259,6 +268,28 @@ def update_decision_outcome(
             "UPDATE decisions SET order_id = ?, order_status = ?, error_msg = ? "
             "WHERE event_id = ?",
             (order_id, order_status, error_msg, event_id),
+        )
+
+
+def record_recompute_audit(
+    db_path: str,
+    event_id: int,
+    *,
+    surge_15m: float | None,
+    rsi_14: float | None,
+    chg_24h_pct: float | None,
+) -> None:
+    """Stamp the K-line-recomputed feature values on the decision row.
+
+    Idempotent UPDATE: if record_decision hasn't been called yet (race), the
+    UPDATE silently affects zero rows and the caller will re-stamp on its
+    next pass.
+    """
+    with get_conn(db_path) as conn:
+        conn.execute(
+            "UPDATE decisions SET recompute_surge_15m=?, recompute_rsi_14=?, "
+            "recompute_chg_24h_pct=? WHERE event_id=?",
+            (surge_15m, rsi_14, chg_24h_pct, int(event_id)),
         )
 
 

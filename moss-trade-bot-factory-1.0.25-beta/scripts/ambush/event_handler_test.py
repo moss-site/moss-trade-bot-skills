@@ -8,6 +8,7 @@ Run:
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -114,6 +115,54 @@ class TestSymbolActionHistory(unittest.TestCase):
             finally:
                 server.shutdown()
                 server.server_close()
+
+
+class TestRecomputeAudit(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.tmpdir, "audit.db")
+        db.init_db(self.db_path)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_columns_added_idempotently(self):
+        # Re-init should not raise even though columns already exist.
+        db.init_db(self.db_path)
+        with db.get_conn(self.db_path) as conn:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(decisions)")}
+        for c in ("recompute_surge_15m", "recompute_rsi_14", "recompute_chg_24h_pct"):
+            self.assertIn(c, cols)
+
+    def test_record_recompute_audit_updates_existing_row(self):
+        db.upsert_event(self.db_path, {
+            "event_id": 42,
+            "hl_symbol": "BTC",
+            "trigger_ts": "2026-05-20T00:00:00Z",
+        })
+        db.record_decision(
+            self.db_path, 42, "long", "rule_long_momentum_init",
+            order_status="placed",
+        )
+        db.record_recompute_audit(
+            self.db_path, 42,
+            surge_15m=0.123, rsi_14=55.5, chg_24h_pct=8.2,
+        )
+        with db.get_conn(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT recompute_surge_15m, recompute_rsi_14, recompute_chg_24h_pct "
+                "FROM decisions WHERE event_id=?", (42,)
+            ).fetchone()
+        self.assertAlmostEqual(row[0], 0.123, places=6)
+        self.assertAlmostEqual(row[1], 55.5, places=4)
+        self.assertAlmostEqual(row[2], 8.2, places=4)
+
+    def test_record_recompute_audit_no_decision_row_is_noop(self):
+        # event_id=99 was never decided; UPDATE affects 0 rows, no exception.
+        db.record_recompute_audit(
+            self.db_path, 99,
+            surge_15m=0.0, rsi_14=50.0, chg_24h_pct=0.0,
+        )
 
 
 if __name__ == "__main__":

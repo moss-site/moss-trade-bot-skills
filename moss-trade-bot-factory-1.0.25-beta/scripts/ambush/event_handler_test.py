@@ -232,7 +232,7 @@ class TestKlineDrivenOpen(unittest.TestCase):
         mock_fetch.return_value = [
             {"open": 100, "high": 100, "low": 100, "close": 100,
              "ts": _utc(i)} for i in range(96)
-        ]  # surge=0, rsi=neutral, chg=0 → SKIP
+        ]  # All-flat bars → surge=0, rsi=100 (zero deltas), chg=0 → SKIP
         h = self._make_handler(kline_driven_open=True)
         now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         event = {
@@ -254,6 +254,7 @@ class TestKlineDrivenOpen(unittest.TestCase):
             ).fetchone()
         self.assertEqual(row[0], "skip")
         self.assertAlmostEqual(row[1], 0.0, places=4)
+        self.assertAlmostEqual(row[2], 100.0, places=1)  # RSI on flat bars
         self.assertAlmostEqual(row[3], 0.0, places=4)
 
     @patch("ambush.event_handler.hyperliquid_candles.fetch")
@@ -278,7 +279,7 @@ class TestKlineDrivenOpen(unittest.TestCase):
         # Falls back to envelope → short_spike_extreme would be deferred,
         # so decision is "short" with a deferred reason. Either way decision
         # is not "skip" (which is what happens on fetch error blocking).
-        self.assertIn(row[0], ("short",))
+        self.assertEqual(row[0], "short")
 
     def test_flag_off_uses_envelope_unchanged(self):
         h = self._make_handler(kline_driven_open=False)
@@ -296,6 +297,28 @@ class TestKlineDrivenOpen(unittest.TestCase):
                 "SELECT decision FROM decisions WHERE event_id=?", (3,)
             ).fetchone()
         self.assertEqual(row[0], "short")
+
+    @patch("ambush.event_handler.hyperliquid_candles.fetch")
+    def test_short_bars_falls_back_to_snapshot(self, mock_fetch):
+        mock_fetch.return_value = [
+            {"open": 100, "high": 100, "low": 100, "close": 100,
+             "ts": _utc(i)} for i in range(10)  # < 15 → too few
+        ]
+        h = self._make_handler(kline_driven_open=True)
+        now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        event = {
+            "event_id": 4, "hl_symbol": "SAGA",
+            "trigger_ts": now_ts, "trigger_price": "0.02",
+            "surge_15m": "0.30", "rsi_14": "50", "change_before_24h_pct": "5",
+        }
+        event_handler.process_event(h, self.db_path, event, source="ws_live")
+        with db.get_conn(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT decision, recompute_surge_15m FROM decisions WHERE event_id=?", (4,)
+            ).fetchone()
+        # Falls back to envelope → short decision; audit columns must be NULL (no recompute)
+        self.assertEqual(row[0], "short")
+        self.assertIsNone(row[1])
 
 
 if __name__ == "__main__":

@@ -846,8 +846,7 @@ def process_event(
         if handler.kline_driven_open:
             try:
                 bars = hyperliquid_candles.fetch(
-                    sym_for_gates_early or str(event.get("hl_symbol") or "").strip().upper(),
-                    interval="15m", limit=96,
+                    sym_for_gates_early, interval="15m", limit=96,
                 )
                 if len(bars) >= 15:
                     fresh = features.compute_features(bars)
@@ -875,6 +874,12 @@ def process_event(
             except hyperliquid_candles.HyperliquidCandleError as e:
                 logger.warning(
                     "ambush handler: %s K-line fetch failed (%s); "
+                    "falling back to envelope snapshot",
+                    _format_event_brief(event), e,
+                )
+            except Exception as e:
+                logger.warning(
+                    "ambush handler: %s K-line recompute unexpected error (%s); "
                     "falling back to envelope snapshot",
                     _format_event_brief(event), e,
                 )
@@ -914,7 +919,7 @@ def process_event(
         # These three params used to be declared in ambush_params + sent
         # over the wire but had zero runtime effect (see 2026-05-17 design
         # review). They're now enforced here as pre-trade gates.
-        sym_for_gates = str(event.get("hl_symbol") or "").strip().upper()
+        sym_for_gates = sym_for_gates_early  # hl_symbol never patched by recompute
         if sym_for_gates:
             # 1. same_coin_dedup_days — block re-open on the same coin
             #    within N days of the last open. Uses the skill-local

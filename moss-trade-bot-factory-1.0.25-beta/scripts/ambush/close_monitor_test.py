@@ -334,6 +334,43 @@ class TestKlineSignalReverse(TestKlineCloseCascade):
         self.assertIn("signal_reverse", str(kwargs.get("reasoning", "")))
 
 
+class TestFallbackOnFetchFailure(TestKlineCloseCascade):
+    @patch("ambush.close_monitor._evaluate_position_legacy")
+    @patch("ambush.close_monitor.hyperliquid_candles.fetch")
+    def test_hl_http_error_falls_back_to_legacy(self, mock_fetch, mock_legacy):
+        mock_fetch.side_effect = (
+            close_monitor.hyperliquid_candles.HyperliquidCandleError("503")
+        )
+        pos = {
+            "symbol": "TSTUSDC", "side": "long", "net_qty": "100",
+            "entry_price": "100", "mark_price": "100", "leverage": 3,
+        }
+        close_monitor._evaluate_position(
+            self.client, self.db_path, self._ambush_params(),
+            pos, "TSTUSDC", Decimal("100"),
+            kline_driven=True,
+        )
+        mock_legacy.assert_called_once()
+
+    @patch("ambush.close_monitor._evaluate_position_legacy")
+    @patch("ambush.close_monitor.hyperliquid_candles.fetch")
+    def test_short_bars_falls_back_to_legacy(self, mock_fetch, mock_legacy):
+        mock_fetch.return_value = [
+            {"open": 100, "high": 100, "low": 100, "close": 100,
+             "ts": _now()} for _ in range(10)  # only 10 bars (need 15+)
+        ]
+        pos = {
+            "symbol": "TSTUSDC", "side": "long", "net_qty": "100",
+            "entry_price": "100", "mark_price": "100", "leverage": 3,
+        }
+        close_monitor._evaluate_position(
+            self.client, self.db_path, self._ambush_params(),
+            pos, "TSTUSDC", Decimal("100"),
+            kline_driven=True,
+        )
+        mock_legacy.assert_called_once()
+
+
 def _now():
     return datetime.now(timezone.utc)
 

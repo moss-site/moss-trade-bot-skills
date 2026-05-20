@@ -54,10 +54,15 @@ from trading_client import TradingClient
 logger = logging.getLogger("ambush.close_monitor")
 
 
-# Default tick cadence. 30s mirrors the server-side stop_loss watcher
-# so an event firing on a borderline symbol is checked at most ~30s
-# apart by each watcher.
-DEFAULT_TICK_SECONDS = 30
+# Default tick cadence. 15 min (one K-line cycle) per 2026-05-20 user
+# direction. The server-side stop_loss watcher was removed the same
+# day, so this tick is the ONLY thing that fires automatic closes on
+# trailing/max_hold triggers — worst-case reaction time for an open
+# position is one tick. Combined with 3x leverage and 168h SHORT
+# max_hold, a 15min adverse move can be material; risk accepted per
+# user profile (see docs/superpowers/audits/2026-05-18_ambush_implementation_audit.md
+# §6 changelog entry for 2026-05-20).
+DEFAULT_TICK_SECONDS = 15 * 60
 
 
 def _now_iso() -> str:

@@ -57,21 +57,29 @@ from trading_client import TradingClient
 logger = logging.getLogger("ambush.handler")
 
 
-# Detected (open) signals are only actionable for one 15m K-line cycle.
-# If we receive one >15 minutes after its trigger_ts — typically because
-# the skill was offline and the signal arrived via bootstrap/poller replay
-# — the market conditions that justified the open (surge / RSI / OI Z-
-# score) have almost certainly changed. A genuinely persistent signal
-# would have re-fired in the next K-line; absence of a fresher event
-# means the conditions reverted. We skip late detected signals rather
-# than open on stale data.
+# Detected (open) signals stay actionable for one hour after trigger_ts
+# (2026-05-20 user direction: was 15min = 1 K-line cycle, now widened to
+# 1h = 4 K-line cycles).  Rationale for the widening:
+#
+#   - skill outages of 20-50 minutes (deploy, crash recovery, network
+#     blip) used to drop EVERY queued event on bootstrap replay; with
+#     1h budget those events survive a single-K-line outage and a small
+#     tail beyond
+#   - the dual_gate detector only re-fires on the NEXT K-line if the
+#     condition persists; missing the first K-line by ~10 min and then
+#     waiting 50 min for re-fire is strictly worse than acting on the
+#     50-min-old event ourselves
+#   - the 5-rule decider's inputs (surge_15m / rsi_14 / chg_24h) DO
+#     decay, but slowly — surge over a 15min bar is closed-form for
+#     that bar, and rsi/chg measured at trigger time remain reasonable
+#     anchors for a few bars
 #
 # Note: exit_signal is NOT subject to this check — a late close is still
 # useful (any close > no close), and exit_signal.reason is event-time
 # state that doesn't decay (oi_revert/max_hold are still meaningful at
 # emit-time even if delivery is delayed).
-_DETECTED_SIGNAL_STALE_AFTER_SECONDS = 15 * 60  # 15 min = 1 K-line cycle
-_DEFERRED_OPEN_MAX_LATE_SECONDS = 15 * 60
+_DETECTED_SIGNAL_STALE_AFTER_SECONDS = 60 * 60  # 1 hour = 4 K-line cycles
+_DEFERRED_OPEN_MAX_LATE_SECONDS = 60 * 60
 
 
 # Server returns these HTTP-translated error codes when the bot is

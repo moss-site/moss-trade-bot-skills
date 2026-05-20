@@ -207,8 +207,8 @@ def main() -> int:
         help="REST poller tick in seconds (default 30)",
     )
     parser.add_argument(
-        "--close-tick-seconds", type=int, default=30,
-        help="Close monitor tick in seconds (trailing/max_hold check; default 30)",
+        "--close-tick-seconds", type=int, default=15 * 60,
+        help="Close monitor tick in seconds (trailing/max_hold check; default 900 = 15min)",
     )
     parser.add_argument(
         "--action-history-host", default="127.0.0.1",

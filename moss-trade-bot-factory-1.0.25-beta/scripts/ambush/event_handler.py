@@ -762,15 +762,10 @@ def resume_deferred_opens(handler: EventHandler, db_path: str) -> int:
 def process_event(
     handler: EventHandler,
     db_path: str,
-    direction_or_event,
-    event: dict | None = None,
+    event: dict,
     source: str = "unknown",
 ) -> None:
     """Process exactly one event envelope. Idempotent on event_id.
-
-    Supports two call styles for backward compatibility:
-      5-arg (existing callers): process_event(handler, db_path, direction, event, source)
-      4-arg (new tests/callers): process_event(handler, db_path, event, source=...)
 
     `source` is one of: "ws_bootstrap" / "ws_live" / "poll" — used for
     log tagging only; dedup is purely by event_id.
@@ -780,15 +775,6 @@ def process_event(
     their own retry semantics and we don't want one bad event to kill
     the consumer.
     """
-    # Compat shim: if direction_or_event is a dict, the caller used the
-    # 4-arg form (direction omitted); shift args accordingly.
-    if isinstance(direction_or_event, dict):
-        direction: str | None = None
-        event = direction_or_event
-        # `source` already captured from 4th positional / keyword arg
-    else:
-        direction = direction_or_event
-        # event and source already correctly bound
     try:
         event_id_raw = event.get("event_id")
         if event_id_raw is None:
@@ -840,9 +826,9 @@ def process_event(
             db.set_last_event_id_seen(db_path, event_id)
             return
 
-        # Resolve effective direction from handler if not supplied by caller.
+        # Derive direction from handler params.
         effective_direction = (
-            direction or handler.ambush_params.get("direction") or "balanced"
+            handler.ambush_params.get("direction") or "balanced"
         ).lower()
 
         # ── K-line recompute block ───────────────────────────────────────

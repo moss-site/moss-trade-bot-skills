@@ -70,7 +70,7 @@ async def run_poller(
                     await loop.run_in_executor(
                         None,
                         event_handler.process_event,
-                        handler, db_path, direction, ev, "poll",
+                        handler, db_path, ev, "poll",
                     )
             else:
                 logger.debug("ambush poller: no new events since id=%d", since)

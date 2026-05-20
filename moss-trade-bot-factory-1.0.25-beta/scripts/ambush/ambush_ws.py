@@ -78,7 +78,7 @@ async def run_ws(
                 await loop.run_in_executor(
                     None,
                     event_handler.process_event,
-                    handler, db_path, direction, ev, "ws_bootstrap",
+                    handler, db_path, ev, "ws_bootstrap",
                 )
 
             # 2b. Replay missed exit signals. Order matters: open events
@@ -139,7 +139,7 @@ async def run_ws(
                         await loop.run_in_executor(
                             None,
                             event_handler.process_event,
-                            handler, db_path, direction, ev, "ws_live",
+                            handler, db_path, ev, "ws_live",
                         )
                     elif msg_type == "ambush_exit_signal":
                         sig = msg.get("exit_signal") or {}

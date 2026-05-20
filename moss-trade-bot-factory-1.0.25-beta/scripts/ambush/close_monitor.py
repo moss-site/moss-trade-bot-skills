@@ -438,6 +438,11 @@ def _evaluate_position_kline_driven(
         else:
             pnl_pct = (entry - last_close) / entry
         leverage = int(pos.get("leverage") or 1)
+        if leverage <= 0:
+            return  # bad data, skip
+        # Note: leverage is read for the bad-data guard above, not for the ATR
+        # trigger below — sl_dist is already a price-return fraction so leverage
+        # cancels out (pnl_pct * lev <= -sl_dist * lev ⟺ pnl_pct <= -sl_dist).
         if pnl_pct <= -sl_dist:
             _close_now(
                 client, db_path, symbol, side, "atr_stop_loss",
@@ -452,9 +457,9 @@ def _evaluate_position_kline_driven(
     state = db.get_position_state(db_path, symbol)
 
     # 2. max_hold
-    max_hold_hours = int(side_cfg.get("max_hold_hours", 168))
+    max_hold_hours = int(side_cfg.get("max_hold_hours", 0))
     opened_at_str = state.get("opened_at") if state else None
-    if opened_at_str:
+    if max_hold_hours > 0 and opened_at_str:
         try:
             opened_at = datetime.fromisoformat(opened_at_str)
             elapsed_hours = (datetime.now(timezone.utc) - opened_at).total_seconds() / 3600

@@ -670,6 +670,13 @@ def _run_deferred_open(
                             db_path, event_id, order_status="deferred_expired_recompute",
                             error_msg=f"K-line recompute fresh={fresh_dec.side}/{fresh_dec.reason}",
                         )
+                        try:
+                            db.mark_event_synced(db_path, event_id)
+                        except Exception as e:
+                            logger.warning(
+                                "ambush handler: deferred-open event_id=%d sync mark failed: %s",
+                                event_id, e,
+                            )
                         return
                 else:
                     logger.warning(

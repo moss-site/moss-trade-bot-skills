@@ -402,9 +402,12 @@ def _evaluate_position_kline_driven(
 ) -> None:
     """K-line cascade: fetch 15m bars, apply priority-ordered exit logic.
 
-    Priority 1 (this task): ATR stop_loss.
-    Priority 2-4 (T9-T10):  trailing, max_hold, signal_reverse — currently
-    fall through to legacy for those checks.
+    Priority 1 (T8): ATR stop_loss.
+    Priority 2 (T10-next): max_hold — placeholder comment, added next task.
+    Priority 3 (T9, this task): K-line-close trailing — ratchets peak/trough
+        on each tick using latest K-line close; fires _close_now("trailing")
+        when drift from peak exceeds trailing_pct.
+    Priority 4 (future): signal_reverse.
     """
     side = "long" if net_qty > 0 else "short"
     entry = _parse_decimal(pos.get("entry_price", "0"))
@@ -445,9 +448,40 @@ def _evaluate_position_kline_driven(
             )
             return
 
-    # Priorities 2-4 added in T9-T10. Fall back to legacy for
-    # trailing, max_hold, and signal_reverse checks.
-    _evaluate_position_legacy(client, db_path, ambush_params, pos, symbol, net_qty)
+    # 2. max_hold — added in next task
+    # 3. K-line-close trailing
+    state = db.get_position_state(db_path, symbol)
+    trailing_pct = Decimal(str(side_cfg.get("trailing_pct", 0.25)))
+    if state is None:
+        # Bootstrap with current K-line close as initial peak.
+        db.upsert_position_state(
+            db_path, symbol=symbol, side=side,
+            entry_price=str(entry),
+            opened_at=datetime.now(timezone.utc).isoformat(),
+            peak_price=str(last_close),
+        )
+        logger.info(
+            "close_monitor: bootstrap %s side=%s entry=%s peak=%s (K-line close)",
+            symbol, side, entry, last_close,
+        )
+        return  # need at least one tick of history to evaluate trailing
+    prev_peak = _parse_decimal(state.get("peak_price", "0"))
+    if side == "long":
+        new_peak = max(prev_peak, last_close)
+        drift = (new_peak - last_close) / new_peak if new_peak > 0 else Decimal("0")
+    else:
+        new_peak = min(prev_peak, last_close) if prev_peak > 0 else last_close
+        drift = (last_close - new_peak) / new_peak if new_peak > 0 else Decimal("0")
+    # Ratchet first (write the updated peak), then test.
+    if new_peak != prev_peak:
+        db.update_position_peak(db_path, symbol, str(new_peak))
+    if drift >= trailing_pct:
+        _close_now(
+            client, db_path, symbol, side, "trailing",
+            extras={"peak": str(new_peak), "last_close": str(last_close),
+                    "drift_pct": str(drift), "trailing_pct": str(trailing_pct)},
+        )
+        return
 
 
 def _close_now(

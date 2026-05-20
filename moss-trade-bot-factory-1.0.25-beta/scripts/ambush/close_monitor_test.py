@@ -136,5 +136,70 @@ class TestKlineCloseCascade(unittest.TestCase):
         self.client.close_position.assert_not_called()
 
 
+class TestKlineTrailing(TestKlineCloseCascade):
+    @patch("ambush.close_monitor.hyperliquid_candles.fetch")
+    def test_long_trailing_triggers_on_kline_close_drift(self, mock_fetch):
+        # Long, entry=100, peak=150, last_close=104 → drift=(150-104)/150=30.6%
+        # trailing_pct=0.30 → trigger.
+        bars = [{"open": 100, "high": 100, "low": 100, "close": 100,
+                 "ts": _now() - timedelta(minutes=15 * i)} for i in range(95)]
+        bars.reverse()
+        bars.append({"open": 105, "high": 105, "low": 104, "close": 104,
+                     "ts": _now()})
+        mock_fetch.return_value = bars
+        # ATR over flat bars then one move = small; pnl from entry=100 to
+        # close=104 = +4% > -sl_dist → ATR doesn't fire.
+        pos = {
+            "symbol": "TSTUSDC", "side": "long", "net_qty": "100",
+            "entry_price": "100", "mark_price": "104", "leverage": 3,
+        }
+        db.upsert_position_state(
+            self.db_path, symbol="TSTUSDC", side="long",
+            entry_price="100", opened_at=datetime.now(timezone.utc).isoformat(),
+            peak_price="150",  # historical peak — high enough drift
+        )
+        close_monitor._evaluate_position(
+            self.client, self.db_path, self._ambush_params(),
+            pos, "TSTUSDC", Decimal("100"),
+            kline_driven=True,
+        )
+        self.client.close_position.assert_called_once()
+        kwargs = self.client.close_position.call_args.kwargs
+        self.assertIn("trailing", str(kwargs.get("reasoning", "")))
+
+    @patch("ambush.close_monitor.hyperliquid_candles.fetch")
+    def test_long_trailing_ratchets_peak_on_close(self, mock_fetch):
+        # Long, peak was 105, latest close 110 → peak updates to 110,
+        # drift = 0 → no close yet.
+        bars = [{"open": 100, "high": 100, "low": 100, "close": 100,
+                 "ts": _now() - timedelta(minutes=15 * i)} for i in range(95)]
+        bars.reverse()
+        bars.append({"open": 109, "high": 111, "low": 109, "close": 110,
+                     "ts": _now()})
+        mock_fetch.return_value = bars
+        pos = {
+            "symbol": "TSTUSDC", "side": "long", "net_qty": "100",
+            "entry_price": "100", "mark_price": "110", "leverage": 3,
+        }
+        db.upsert_position_state(
+            self.db_path, symbol="TSTUSDC", side="long",
+            entry_price="100", opened_at=datetime.now(timezone.utc).isoformat(),
+            peak_price="105",
+        )
+        close_monitor._evaluate_position(
+            self.client, self.db_path, self._ambush_params(),
+            pos, "TSTUSDC", Decimal("100"),
+            kline_driven=True,
+        )
+        self.client.close_position.assert_not_called()
+        # peak should now be 110
+        state = db.get_position_state(self.db_path, "TSTUSDC")
+        self.assertEqual(Decimal(str(state["peak_price"])), Decimal("110"))
+
+
+def _now():
+    return datetime.now(timezone.utc)
+
+
 if __name__ == "__main__":
     unittest.main()

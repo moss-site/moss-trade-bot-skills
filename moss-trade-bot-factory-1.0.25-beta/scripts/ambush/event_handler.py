@@ -624,6 +624,63 @@ def _run_deferred_open(
             "(after %ds wait)",
             event_id, target_symbol, decision.side, delay_seconds,
         )
+
+        # K-line recompute at wake time. The original event's snapshot is now
+        # `delay_seconds` old — re-evaluate. If the rule that justified the open
+        # no longer fires on fresh data, mark the row deferred_expired_recompute
+        # and do not submit the order.
+        if handler.kline_driven_open:
+            try:
+                bars = hyperliquid_candles.fetch(sym_base, interval="15m", limit=96)
+                if len(bars) >= 15:
+                    fresh = features.compute_features(bars)
+                    direction = (handler.ambush_params.get("direction") or "balanced").lower()
+                    fresh_inp = decision_mod.DecisionInput(
+                        surge_15m=fresh["surge_15m"],
+                        rsi_14=fresh["rsi_14"],
+                        chg_before_24h=fresh["chg_24h_pct"],
+                        direction=direction,
+                    )
+                    fresh_dec = decision_mod.decide(fresh_inp)
+                    # Stamp audit either way (best-effort).
+                    try:
+                        db.record_recompute_audit(
+                            db_path, event_id,
+                            surge_15m=fresh["surge_15m"],
+                            rsi_14=fresh["rsi_14"],
+                            chg_24h_pct=fresh["chg_24h_pct"],
+                        )
+                    except Exception:
+                        pass
+                    if fresh_dec.side != decision.side:
+                        logger.info(
+                            "ambush handler: deferred-open event_id=%d wake recompute → %s/%s "
+                            "(original was %s/%s); skipping order",
+                            event_id, fresh_dec.side, fresh_dec.reason,
+                            decision.side, decision.reason,
+                        )
+                        db.mark_deferred_open_done(
+                            db_path, event_id, status="deferred_expired_recompute",
+                            error_msg=f"recompute became {fresh_dec.side}/{fresh_dec.reason}",
+                        )
+                        db.update_decision_outcome(
+                            db_path, event_id, order_status="deferred_expired_recompute",
+                            error_msg=f"K-line recompute fresh={fresh_dec.side}/{fresh_dec.reason}",
+                        )
+                        return
+                else:
+                    logger.warning(
+                        "ambush handler: deferred-open event_id=%d recompute skipped — "
+                        "only %d bars; firing on original decision",
+                        event_id, len(bars),
+                    )
+            except hyperliquid_candles.HyperliquidCandleError as e:
+                logger.warning(
+                    "ambush handler: deferred-open event_id=%d K-line fetch failed (%s); "
+                    "firing on original decision",
+                    event_id, e,
+                )
+
         prev_symbol = handler.client.symbol
         handler.client.symbol = target_symbol
         try:

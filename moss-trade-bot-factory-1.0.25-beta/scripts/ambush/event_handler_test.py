@@ -29,6 +29,8 @@ if _SCRIPTS not in sys.path:
 from ambush import event_handler
 from ambush import action_history_server
 from ambush import live_database as db
+from ambush import decision as decision_mod
+from decimal import Decimal
 
 
 class TestTimestampParsing(unittest.TestCase):
@@ -319,6 +321,91 @@ class TestKlineDrivenOpen(unittest.TestCase):
         # Falls back to envelope → short decision; audit columns must be NULL (no recompute)
         self.assertEqual(row[0], "short")
         self.assertIsNone(row[1])
+
+
+class TestDeferredOpenRecompute(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.tmpdir, "defer.db")
+        db.init_db(self.db_path)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _decision(self):
+        return decision_mod.Decision(
+            side=decision_mod.SIDE_SHORT,
+            reason=decision_mod.REASON_SHORT_SPIKE_EXTREME,
+        )
+
+    @patch("ambush.event_handler.hyperliquid_candles.fetch")
+    def test_wake_recomputes_and_skips_when_no_longer_matches(self, mock_fetch):
+        # Fresh bars now show neutral/no rule fires.
+        mock_fetch.return_value = [
+            {"open": 100, "high": 100, "low": 100, "close": 100,
+             "ts": _utc(i)} for i in range(96)
+        ]
+        client = MagicMock()
+        handler = event_handler.EventHandler(
+            client, {"long_params": {}, "short_params": {}, "rhythm": {}},
+            kline_driven_open=True,
+        )
+        db.upsert_event(self.db_path, {
+            "event_id": 42, "hl_symbol": "DYM",
+            "trigger_ts": "2026-05-20T00:00:00Z",
+        })
+        db.record_decision(self.db_path, event_id=42, decision="short",
+                           reason="rule_short_spike_extreme", order_status="deferred_open")
+        db.enqueue_deferred_open(
+            self.db_path, event_id=42,
+            due_at=datetime.now(timezone.utc).isoformat(),
+            delay_param_name="entry_delay_bars", delay_bars=16,
+        )
+        event_handler._run_deferred_open(
+            handler, self.db_path, event_id=42, decision=self._decision(),
+            target_symbol="DYMUSDC", notional=Decimal("100"), leverage=3,
+            client_order_id="ambush-42", reasoning_zh="zh", reasoning_en="en",
+            delay_seconds=0.0, sym_base="DYM",
+        )
+        client.open_short.assert_not_called()
+        with db.get_conn(self.db_path) as conn:
+            status = conn.execute(
+                "SELECT status FROM deferred_opens WHERE event_id=?", (42,)
+            ).fetchone()[0]
+        self.assertEqual(status, "deferred_expired_recompute")
+
+    @patch("ambush.event_handler.hyperliquid_candles.fetch")
+    def test_wake_recomputes_and_fires_when_still_matches(self, mock_fetch):
+        # Fresh bars still satisfy spike_extreme: last bar surge >0.25.
+        mock_fetch.return_value = [
+            {"open": 100, "high": 100, "low": 100, "close": 100,
+             "ts": _utc(i)} for i in range(95)
+        ] + [{"open": 100, "high": 140, "low": 100, "close": 135,
+              "ts": _utc(95)}]
+        client = MagicMock()
+        client.open_short.return_value = {"order_id": "777"}
+        handler = event_handler.EventHandler(
+            client, {"long_params": {}, "short_params": {}, "rhythm": {}},
+            kline_driven_open=True,
+        )
+        db.upsert_event(self.db_path, {
+            "event_id": 43, "hl_symbol": "DYM",
+            "trigger_ts": "2026-05-20T00:00:00Z",
+        })
+        db.record_decision(self.db_path, event_id=43, decision="short",
+                           reason="rule_short_spike_extreme", order_status="deferred_open")
+        db.enqueue_deferred_open(
+            self.db_path, event_id=43,
+            due_at=datetime.now(timezone.utc).isoformat(),
+            delay_param_name="entry_delay_bars", delay_bars=16,
+        )
+        event_handler._run_deferred_open(
+            handler, self.db_path, event_id=43, decision=self._decision(),
+            target_symbol="DYMUSDC", notional=Decimal("100"), leverage=3,
+            client_order_id="ambush-43", reasoning_zh="zh", reasoning_en="en",
+            delay_seconds=0.0, sym_base="DYM",
+        )
+        client.open_short.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -406,6 +406,71 @@ class TestDeferredOpenRecompute(unittest.TestCase):
             delay_seconds=0.0, sym_base="DYM",
         )
         client.open_short.assert_called_once()
+        with db.get_conn(self.db_path) as conn:
+            status = conn.execute(
+                "SELECT status FROM deferred_opens WHERE event_id=?", (43,)
+            ).fetchone()[0]
+        self.assertNotEqual(status, "deferred_expired_recompute")
+
+    @patch("ambush.event_handler.hyperliquid_candles.fetch")
+    def test_wake_fetch_failure_fires_on_original_decision(self, mock_fetch):
+        mock_fetch.side_effect = event_handler.hyperliquid_candles.HyperliquidCandleError("502")
+        client = MagicMock()
+        client.open_short.return_value = {"order_id": "888"}
+        handler = event_handler.EventHandler(
+            client, {"long_params": {}, "short_params": {}, "rhythm": {}},
+            kline_driven_open=True,
+        )
+        db.upsert_event(self.db_path, {
+            "event_id": 44, "hl_symbol": "DYM",
+            "trigger_ts": datetime.now(timezone.utc).isoformat(),
+        })
+        db.record_decision(self.db_path, event_id=44, decision="short",
+                           reason="rule_short_spike_extreme", order_status="deferred_open")
+        db.enqueue_deferred_open(
+            self.db_path, event_id=44,
+            due_at=datetime.now(timezone.utc).isoformat(),
+            delay_param_name="entry_delay_bars", delay_bars=16,
+        )
+        event_handler._run_deferred_open(
+            handler, self.db_path, event_id=44, decision=self._decision(),
+            target_symbol="DYMUSDC", notional=Decimal("100"), leverage=3,
+            client_order_id="ambush-44", reasoning_zh="zh", reasoning_en="en",
+            delay_seconds=0.0, sym_base="DYM",
+        )
+        client.open_short.assert_called_once()
+
+    @patch("ambush.event_handler.hyperliquid_candles.fetch")
+    def test_wake_short_bars_fires_on_original_decision(self, mock_fetch):
+        # Only 10 bars — below 15-bar threshold for compute_features
+        mock_fetch.return_value = [
+            {"open": 100, "high": 100, "low": 100, "close": 100,
+             "ts": _utc(i)} for i in range(10)
+        ]
+        client = MagicMock()
+        client.open_short.return_value = {"order_id": "999"}
+        handler = event_handler.EventHandler(
+            client, {"long_params": {}, "short_params": {}, "rhythm": {}},
+            kline_driven_open=True,
+        )
+        db.upsert_event(self.db_path, {
+            "event_id": 45, "hl_symbol": "DYM",
+            "trigger_ts": datetime.now(timezone.utc).isoformat(),
+        })
+        db.record_decision(self.db_path, event_id=45, decision="short",
+                           reason="rule_short_spike_extreme", order_status="deferred_open")
+        db.enqueue_deferred_open(
+            self.db_path, event_id=45,
+            due_at=datetime.now(timezone.utc).isoformat(),
+            delay_param_name="entry_delay_bars", delay_bars=16,
+        )
+        event_handler._run_deferred_open(
+            handler, self.db_path, event_id=45, decision=self._decision(),
+            target_symbol="DYMUSDC", notional=Decimal("100"), leverage=3,
+            client_order_id="ambush-45", reasoning_zh="zh", reasoning_en="en",
+            delay_seconds=0.0, sym_base="DYM",
+        )
+        client.open_short.assert_called_once()
 
 
 if __name__ == "__main__":

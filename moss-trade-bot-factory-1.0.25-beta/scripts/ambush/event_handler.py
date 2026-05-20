@@ -614,8 +614,11 @@ def _run_deferred_open(
     order and update the decision audit row. Errors are logged but never
     propagated (this is a daemon thread; raises would kill it silently).
 
-    No re-evaluation of the decision after the delay — see process_event
-    comments for rationale and v2 plan."""
+    When `handler.kline_driven_open` is True, the function re-fetches K-lines at
+    wake time and re-runs the decision rules. If the cached decision no longer
+    fires on fresh data, the order is skipped and the deferred row is marked
+    `deferred_expired_recompute`. Fetch failures and short bars fall through to
+    the original cached decision."""
     try:
         db.mark_deferred_open_running(db_path, event_id)
         time.sleep(delay_seconds)
@@ -677,6 +680,12 @@ def _run_deferred_open(
             except hyperliquid_candles.HyperliquidCandleError as e:
                 logger.warning(
                     "ambush handler: deferred-open event_id=%d K-line fetch failed (%s); "
+                    "firing on original decision",
+                    event_id, e,
+                )
+            except Exception as e:
+                logger.warning(
+                    "ambush handler: deferred-open event_id=%d K-line recompute unexpected error (%s); "
                     "firing on original decision",
                     event_id, e,
                 )

@@ -448,8 +448,8 @@ def _evaluate_position_kline_driven(
             )
             return
 
-    # 2. max_hold — added in next task
-    # 3. K-line-close trailing
+    # max_hold — added in T10 at priority 2 (between ATR and trailing).
+    # K-line-close trailing (priority 3 after T10; currently runs at slot 2).
     state = db.get_position_state(db_path, symbol)
     trailing_pct = Decimal(str(side_cfg.get("trailing_pct", 0.25)))
     if state is None:
@@ -467,7 +467,7 @@ def _evaluate_position_kline_driven(
         return  # need at least one tick of history to evaluate trailing
     prev_peak = _parse_decimal(state.get("peak_price", "0"))
     if side == "long":
-        new_peak = max(prev_peak, last_close)
+        new_peak = max(prev_peak, last_close) if prev_peak > 0 else last_close
         drift = (new_peak - last_close) / new_peak if new_peak > 0 else Decimal("0")
     else:
         new_peak = min(prev_peak, last_close) if prev_peak > 0 else last_close

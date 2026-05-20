@@ -197,6 +197,78 @@ class TestKlineTrailing(TestKlineCloseCascade):
         self.assertEqual(Decimal(str(state["peak_price"])), Decimal("110"))
 
 
+    @patch("ambush.close_monitor.hyperliquid_candles.fetch")
+    def test_short_trailing_triggers_on_kline_close_drift(self, mock_fetch):
+        # Short, entry=100, trough(peak)=80, last_close=112 → drift=(112-80)/80=40%
+        # short trailing_pct=0.25 → 40% > 25% → triggers.
+        # Use ATR=10 so sl_dist = 2.5*10/100 = 25% > pnl=12% → ATR won't fire first.
+        bars = _bars_with_atr(entry=112.0, atr_target=10.0)
+        mock_fetch.return_value = bars
+        pos = {
+            "symbol": "TSTUSDC", "side": "short", "net_qty": "-100",
+            "entry_price": "100", "mark_price": "112", "leverage": 3,
+        }
+        db.upsert_position_state(
+            self.db_path, symbol="TSTUSDC", side="short",
+            entry_price="100", opened_at=datetime.now(timezone.utc).isoformat(),
+            peak_price="80",  # historical trough
+        )
+        close_monitor._evaluate_position(
+            self.client, self.db_path, self._ambush_params(),
+            pos, "TSTUSDC", Decimal("-100"),
+            kline_driven=True,
+        )
+        self.client.close_position.assert_called_once()
+        kwargs = self.client.close_position.call_args.kwargs
+        self.assertIn("trailing", str(kwargs.get("reasoning", "")))
+
+    @patch("ambush.close_monitor.hyperliquid_candles.fetch")
+    def test_bootstrap_creates_state_when_none(self, mock_fetch):
+        # Flat bars, no position_state row → bootstrap row written, no close.
+        bars = [{"open": 100, "high": 100, "low": 100, "close": 100,
+                 "ts": _now() - timedelta(minutes=15 * i)} for i in range(96)]
+        bars.reverse()
+        mock_fetch.return_value = bars
+        pos = {
+            "symbol": "TSTUSDC", "side": "long", "net_qty": "100",
+            "entry_price": "100", "mark_price": "100", "leverage": 3,
+        }
+        # Note: NO upsert_position_state — state is None.
+        close_monitor._evaluate_position(
+            self.client, self.db_path, self._ambush_params(),
+            pos, "TSTUSDC", Decimal("100"),
+            kline_driven=True,
+        )
+        self.client.close_position.assert_not_called()
+        state = db.get_position_state(self.db_path, "TSTUSDC")
+        self.assertIsNotNone(state)
+        self.assertEqual(Decimal(str(state["peak_price"])), Decimal("100"))
+
+    @patch("ambush.close_monitor.hyperliquid_candles.fetch")
+    def test_drift_exactly_at_threshold_fires(self, mock_fetch):
+        # drift == trailing_pct (inclusive) → fires.
+        # long, peak=100, last_close=70 → drift = 30/100 = 0.30 == trailing_pct.
+        # Use bars with ATR=20 so sl_dist = 2*20/entry_in_bars = large → ATR won't fire.
+        # last_close of bars = 70.0 (entry param for _bars_with_atr).
+        bars = _bars_with_atr(entry=70.0, atr_target=20.0)
+        mock_fetch.return_value = bars
+        pos = {
+            "symbol": "TSTUSDC", "side": "long", "net_qty": "100",
+            "entry_price": "100", "mark_price": "70", "leverage": 3,
+        }
+        db.upsert_position_state(
+            self.db_path, symbol="TSTUSDC", side="long",
+            entry_price="100", opened_at=datetime.now(timezone.utc).isoformat(),
+            peak_price="100",
+        )
+        close_monitor._evaluate_position(
+            self.client, self.db_path, self._ambush_params(),
+            pos, "TSTUSDC", Decimal("100"),
+            kline_driven=True,
+        )
+        self.client.close_position.assert_called_once()
+
+
 def _now():
     return datetime.now(timezone.utc)
 

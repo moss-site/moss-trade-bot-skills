@@ -57,6 +57,7 @@ LONG_LEVERAGE_POSITION = {
 }
 LONG_FIXED = {
     "stop_loss_pct":  0.08,   # 旧 0.20；sweep top 全部使用 0.08，失败入场快速止损
+    "sl_atr_mult":    2.0,    # NEW 2026-05-20: ATR-based stop when --kline-driven-close on
     "trailing_pct":   0.30,   # 旧 0.25；让赢家跑得更远
     "max_hold_hours": 30,
     "momentum_bars":  0,      # 旧 2；sweep 证明 0 收益最高
@@ -78,6 +79,7 @@ SHORT_LEVERAGE_POSITION = {
 }
 SHORT_FIXED = {
     "stop_loss_pct":    0.40,   # 旧 0.28；窄 stop 在异动初始 squeeze 必出局
+    "sl_atr_mult":      2.5,    # NEW 2026-05-20: wider for short squeeze tails
     "trailing_pct":     0.25,   # 旧 0.28；top 区域统一 0.25
     "max_hold_hours":   168,    # 旧 132；7d 让回归走完
     "cooldown_bars":    15,

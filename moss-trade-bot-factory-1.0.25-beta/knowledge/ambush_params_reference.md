@@ -86,11 +86,17 @@ LONG 信号（任一满足）:
 
 ## 做多参数（long_params，仅 direction=long 或 balanced 命中 long 规则时生效）
 
+> **K-line-driven close (2026-05-20)**：当 live_runner 启动时带 `--kline-driven-close` 旗标，
+> close_monitor 切换到 4 优先级 cascade（ATR 止损 / max_hold / K 线收盘 trailing / signal_reverse）。
+> 默认 off — 不带旗标时 `sl_atr_mult` 字段不被读取，仅占位。当前 sl_atr_mult 默认值 2.0 / 2.5
+> 是工程师初值，未经回测校准（follow-up: 扩展 calibrate_thresholds.py）。
+
 | 字段 | 范围 | 默认 | 含义 |
 |------|------|------|------|
 | `leverage` | 1 ~ 3 | 3 | 杠杆。**Hyperliquid 把异动币目标人群（127 / 230 个永续）全部 cap 在 3x**，server 端按 HL meta 强制——无论用户多激进，写超过 3 会被 `validateSourceLeverage` 拒绝。激进度通过 `position_pct` 表达 |
 | `position_pct` | 0.10 ~ 0.50 | 0.20 | 单笔保证金占可用资金比例 |
 | `stop_loss_pct` | 0.05 ~ 0.40 | 0.08 | 硬止损。**2026-05-18 lev=3 sweep 调整**：旧 0.20 在 long 信号失败时拖时间，0.08 让失败入场迅速止损 |
+| `sl_atr_mult` | 1.0 ~ 4.0 | 2.0 | 配合 `--kline-driven-close` 使用：实际止损距离 = `sl_atr_mult × ATR(14) / entry`。低于此点 × 杠杆 → 平仓。原 `stop_loss_pct` 作为 HL K 线 API 不可用时的 fallback floor 保留 |
 | `trailing_pct` | 0.05 ~ 0.30 | 0.30 | 移动止盈回撤。**调整**：旧 0.25 → 0.30，让赢家跑得更远（lev=3 sweep top 全部 0.30）|
 | `max_hold_hours` | 6 ~ 168 | 30 | 最长持仓时长。做多典型 1~2 天 |
 | `momentum_bars` | 0 ~ 8 | 0 | 动量确认窗口：等几根 15m K 线后再开仓。**调整**：旧 2 → 0；sweep 显示 long 信号（`momentum_init` / `momentum_extend`）本身已含确认，再加延迟反而错过 fast move |
@@ -105,6 +111,7 @@ LONG 信号（任一满足）:
 | `leverage` | 1 ~ 3 | 3 | 杠杆。和做多用同一个 HL cap=3x；做空 odds 高（统计 60% 异动 24h 内回调）但杠杆上限被交易所封死。激进度靠 `position_pct` |
 | `position_pct` | 0.10 ~ 0.50 | 0.20 | 单笔保证金占可用资金比例。**2026-05-18 lev=3 sweep 下调**：旧 0.30，sweep 显示 pp=0.30 下 dd ≈ -70%，下调到 0.20 控 dd 在 -55% 内 |
 | `stop_loss_pct` | 0.05 ~ 0.40 | 0.40 | 硬止损。**调整**：旧 0.28 在异动初始 squeeze 必出局；sweep 1600 top 15 全部用 0.40 |
+| `sl_atr_mult` | 1.0 ~ 4.0 | 2.5 | 配合 `--kline-driven-close` 使用：实际止损距离 = `sl_atr_mult × ATR(14) / entry`。低于此点 × 杠杆 → 平仓。原 `stop_loss_pct` 作为 HL K 线 API 不可用时的 fallback floor 保留。做空容忍 squeeze tail 多一点，所以默认值高一档 |
 | `trailing_pct` | 0.05 ~ 0.30 | 0.25 | 移动止盈回撤。**调整**：旧 0.28 → 0.25，sweep top 区域统一 0.25 |
 | `max_hold_hours` | 6 ~ 168 | 168 | 最长持仓时长。**调整**：旧 132 → 168 (7d)，让 OI 回归走完 |
 | `cooldown_bars` | 1 ~ 16 | 15 | 平仓后冷却 K 线数。做空冷却长，避免反复被轧 + 反弹消耗 |
@@ -178,6 +185,7 @@ defaults = {
     "long_params": {
         "leverage":      3,          # HL cap，强制
         "stop_loss_pct": 0.08,       # 2026-05-18 sweep: 旧 0.20 → 0.08（紧 stop 失败快撤）
+        "sl_atr_mult":   2.0,        # 2026-05-20: ATR-based stop when --kline-driven-close on
         "trailing_pct":  0.30,       # 2026-05-18 sweep: 旧 0.25 → 0.30（让赢家跑）
         "max_hold_hours": 30,
         "momentum_bars": 0,          # 2026-05-18 sweep: 旧 2 → 0（long 信号已含确认）
@@ -186,6 +194,7 @@ defaults = {
     "short_params": {
         "leverage":         3,       # HL cap，强制
         "stop_loss_pct":    0.40,    # 2026-05-18 sweep: 旧 0.28 → 0.40（躲初始 squeeze）
+        "sl_atr_mult":      2.5,     # 2026-05-20: wider for short squeeze tails
         "trailing_pct":     0.25,    # 2026-05-18 sweep: 旧 0.28 → 0.25
         "max_hold_hours":   168,     # 2026-05-18 sweep: 旧 132 → 168 (7d)
         "cooldown_bars":    15,
@@ -224,7 +233,7 @@ defaults = {
 | symbol | 创建时绑死 | **占位 `"*"`**（DB 列 NOT NULL；运行时实际持仓 symbol 由 `active_symbol` 列承载）|
 | 5 维信号权重 | 有 | **没有**（用规则替代） |
 | entry_threshold | 有 | **没有**（用 surge_15m_threshold 替代） |
-| sl_atr_mult | 有 | **没有**（用 long/short_params 各自的 stop_loss_pct 替代） |
+| sl_atr_mult | 有 | **有**（long_params 默认 2.0 / short_params 默认 2.5；仅 `--kline-driven-close` 时生效） |
 | 双方向参数 | 单组（long_bias 一个数控制方向） | **双通道**（long_params + short_params 完全独立） |
 | 进化 | 周级 cron 自动 | **不进化**（参数固化）|
 | 上线后改参数 | 支持（重新上传） | **不支持**（只能新建 bot）|

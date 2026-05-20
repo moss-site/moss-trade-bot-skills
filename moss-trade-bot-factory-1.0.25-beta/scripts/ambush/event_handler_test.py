@@ -322,6 +322,64 @@ class TestKlineDrivenOpen(unittest.TestCase):
         self.assertEqual(row[0], "short")
         self.assertIsNone(row[1])
 
+    @patch("ambush.event_handler.hyperliquid_candles.fetch")
+    def test_post_decision_called_after_record(self, mock_fetch):
+        """C1: skill must POST decision back to server after every record_decision."""
+        mock_fetch.return_value = [
+            {"open": 100, "high": 100, "low": 100, "close": 100,
+             "ts": _utc(i)} for i in range(96)
+        ]
+        client = MagicMock()
+        client.post_ambush_decision.return_value = {"ok": True}
+        handler = event_handler.EventHandler(
+            client,
+            {"long_params": {}, "short_params": {}, "rhythm": {}},
+            kline_driven_open=True,
+        )
+        # Use a fresh trigger_ts to bypass stale-signal early-return
+        now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        event = {
+            "event_id": 999_001, "hl_symbol": "TST",
+            "trigger_ts": now_ts, "trigger_price": "0.02",
+            "surge_15m": "0.30", "rsi_14": "50", "change_before_24h_pct": "5",
+        }
+        event_handler.process_event(handler, self.db_path, event, source="ws_live")
+        # Flat bars → recompute disagrees with envelope → decision = skip
+        # Whatever the final decision, post_ambush_decision MUST be called.
+        assert client.post_ambush_decision.called, "post_ambush_decision was not called"
+        args = client.post_ambush_decision.call_args
+        assert args.kwargs.get("event_id") == 999_001, args.kwargs
+        assert args.kwargs.get("decision") in ("skip", "long", "short"), args.kwargs
+
+    @patch("ambush.event_handler.hyperliquid_candles.fetch")
+    def test_post_decision_failure_does_not_break_handler(self, mock_fetch):
+        """C1: post_ambush_decision raising must NOT block the order path."""
+        mock_fetch.return_value = [
+            {"open": 100, "high": 100, "low": 100, "close": 100,
+             "ts": _utc(i)} for i in range(96)
+        ]
+        client = MagicMock()
+        client.post_ambush_decision.side_effect = RuntimeError("simulated network failure")
+        handler = event_handler.EventHandler(
+            client,
+            {"long_params": {}, "short_params": {}, "rhythm": {}},
+            kline_driven_open=True,
+        )
+        now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        event = {
+            "event_id": 999_002, "hl_symbol": "TST",
+            "trigger_ts": now_ts, "trigger_price": "0.02",
+            "surge_15m": "0.30", "rsi_14": "50", "change_before_24h_pct": "5",
+        }
+        # Should NOT raise even though post_ambush_decision raises
+        event_handler.process_event(handler, self.db_path, event, source="ws_live")
+        # The decision should still be recorded locally
+        with db.get_conn(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT decision FROM decisions WHERE event_id=?", (999_002,)
+            ).fetchone()
+        assert row is not None, "local SQLite decision must still be recorded"
+
 
 class TestDeferredOpenRecompute(unittest.TestCase):
     def setUp(self):

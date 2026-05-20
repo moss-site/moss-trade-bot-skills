@@ -957,21 +957,45 @@ def process_event(
                     _format_event_brief(event), e,
                 )
 
-        # Inner helper: stamp recompute audit columns onto the decision row,
-        # swallowing any exception so a stamp failure never crashes the handler.
-        def _stamp_audit() -> None:
-            if recompute_audit is None:
-                return
+        # Inner helper: stamp recompute audit columns locally AND post the
+        # decision back to the server. Both are best-effort — each wrapped in
+        # try/except so neither can block the order path.
+        def _stamp_audit_and_post(
+            decision_str: str,
+            reason_str: str,
+            *,
+            source_order_id: str = "",
+        ) -> None:
+            """Best-effort: stamp K-line recompute audit columns locally AND post
+            decision back to server for cross-host audit. Both wrapped in
+            try/except so the order path is never blocked by audit overhead.
+            See plan §C1.
+            """
+            if recompute_audit is not None:
+                try:
+                    db.record_recompute_audit(
+                        db_path, event_id,
+                        surge_15m=recompute_audit[0],
+                        rsi_14=recompute_audit[1],
+                        chg_24h_pct=recompute_audit[2],
+                    )
+                except Exception as _e:
+                    logger.warning(
+                        "ambush handler: stamp audit failed event_id=%d: %s",
+                        event_id, _e,
+                    )
             try:
-                db.record_recompute_audit(
-                    db_path, event_id,
-                    surge_15m=recompute_audit[0],
-                    rsi_14=recompute_audit[1],
-                    chg_24h_pct=recompute_audit[2],
+                handler.client.post_ambush_decision(
+                    event_id=event_id,
+                    decision=decision_str,
+                    reason=reason_str,
+                    momentum_passed=False,  # plumbed if/when balanced_decide_v0 surfaces this
+                    source_order_id=source_order_id or "",
                 )
             except Exception as _e:
                 logger.warning(
-                    "ambush handler: stamp audit failed event_id=%d: %s", event_id, _e,
+                    "ambush handler: post decision write-back failed event_id=%d: %s",
+                    event_id, _e,
                 )
 
         decision = decision_mod.decision_from_event(event, effective_direction)
@@ -983,7 +1007,7 @@ def process_event(
         # SKIP: persist decision and move on.
         if decision.side == decision_mod.SIDE_SKIP:
             db.record_decision(db_path, event_id, decision.side, decision.reason)
-            _stamp_audit()
+            _stamp_audit_and_post(decision.side, decision.reason)
             db.mark_event_synced(db_path, event_id)
             db.set_last_event_id_seen(db_path, event_id)
             return
@@ -1017,7 +1041,7 @@ def process_event(
                             db_path, event_id, decision_mod.SIDE_SKIP, "same_coin_dedup",
                             error_msg=f"last open {_format_timedelta(age)} ago, dedup_days={dedup_days}",
                         )
-                        _stamp_audit()
+                        _stamp_audit_and_post(decision_mod.SIDE_SKIP, "same_coin_dedup")
                         db.mark_event_synced(db_path, event_id)
                         db.set_last_event_id_seen(db_path, event_id)
                         return
@@ -1046,7 +1070,7 @@ def process_event(
                             db_path, event_id, decision_mod.SIDE_SKIP, "cooldown_active",
                             error_msg=f"last close {_format_timedelta(age)} ago, cooldown_bars={cooldown_bars}",
                         )
-                        _stamp_audit()
+                        _stamp_audit_and_post(decision_mod.SIDE_SKIP, "cooldown_active")
                         db.mark_event_synced(db_path, event_id)
                         db.set_last_event_id_seen(db_path, event_id)
                         return
@@ -1077,7 +1101,7 @@ def process_event(
                     db_path, event_id, decision_mod.SIDE_SKIP, "max_trades_reached",
                     error_msg=f"event_id {event_id} already has {already_opened_count} trade(s); cap=1",
                 )
-                _stamp_audit()
+                _stamp_audit_and_post(decision_mod.SIDE_SKIP, "max_trades_reached")
                 db.mark_event_synced(db_path, event_id)
                 db.set_last_event_id_seen(db_path, event_id)
                 return
@@ -1094,7 +1118,7 @@ def process_event(
                 db_path, event_id, decision.side, decision.reason,
                 order_status="rejected", error_msg="notional_zero",
             )
-            _stamp_audit()
+            _stamp_audit_and_post(decision.side, decision.reason)
             db.set_last_event_id_seen(db_path, event_id)
             return
 
@@ -1108,7 +1132,7 @@ def process_event(
                 db_path, event_id, decision.side, decision.reason,
                 order_status="rejected", error_msg="empty_symbol",
             )
-            _stamp_audit()
+            _stamp_audit_and_post(decision.side, decision.reason)
             db.set_last_event_id_seen(db_path, event_id)
             return
 
@@ -1155,7 +1179,7 @@ def process_event(
                 order_status="rejected",
                 error_msg=f"already holding {held_sym} qty={qty}, cannot open {target_symbol}",
             )
-            _stamp_audit()
+            _stamp_audit_and_post(decision.side, "single_position_lock")
             db.mark_event_synced(db_path, event_id)
             db.set_last_event_id_seen(db_path, event_id)
             handler.client.symbol = prev_symbol
@@ -1221,7 +1245,7 @@ def process_event(
                 reason=decision.reason,
                 error_msg=f"deferred {delay_seconds}s ({delay_param_name}={delay_bars} bars)",
             )
-            _stamp_audit()
+            _stamp_audit_and_post(decision.side, decision.reason)
             db.mark_event_synced(db_path, event_id)
             db.set_last_event_id_seen(db_path, event_id)
             handler.client.symbol = prev_symbol
@@ -1259,7 +1283,7 @@ def process_event(
                 db_path, event_id, decision.side, decision.reason,
                 order_status="failed", error_msg=str(e),
             )
-            _stamp_audit()
+            _stamp_audit_and_post(decision.side, decision.reason)
             db.set_last_event_id_seen(db_path, event_id)
             handler.client.symbol = prev_symbol
             return
@@ -1278,7 +1302,7 @@ def process_event(
             db_path, event_id, decision.side, decision.reason,
             order_id=order_id, order_status=status, error_msg=err,
         )
-        _stamp_audit()
+        _stamp_audit_and_post(decision.side, decision.reason, source_order_id=str(order_id or ""))
         if status == "placed":
             db.mark_event_synced(db_path, event_id)
             # Record successful open for downstream rhythm gates

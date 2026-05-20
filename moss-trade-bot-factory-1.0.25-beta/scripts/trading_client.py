@@ -530,6 +530,38 @@ class TradingClient:
             self.symbol = prev_symbol
             self.bot_id = prev_bot_id
 
+    def post_ambush_decision(
+        self,
+        event_id: int,
+        decision: str,
+        reason: str,
+        *,
+        momentum_passed: bool = False,
+        source_order_id: str = "",
+    ) -> dict:
+        """Write a decision audit row back to the server.
+
+        Idempotent — same (event_id, bot_id) upserts. Used by
+        ambush.event_handler after every record_decision() call so the server
+        has the complete per-event per-bot trail (`ambush_event_decision`).
+
+        Best-effort by design: caller should NOT raise on failure. Local
+        SQLite is the authoritative store. Server row is for cross-host
+        audit + UI + compliance only.
+
+        Path: POST /agent/realtime/bots/{bot_id}/ambush-events/{event_id}/decision
+        Backend handler: internal/api/ambush_event_decision.go:postAmbushEventDecisionV2
+        Plan: docs/superpowers/plans/2026-05-20-ambush-qa-followups.md §C1
+        """
+        body = {
+            "decision":        str(decision),
+            "reason":          str(reason),
+            "momentum_passed": bool(momentum_passed),
+            "source_order_id": str(source_order_id or ""),
+        }
+        path = f"/agent/realtime/bots/{self.bot_id}/ambush-events/{int(event_id)}/decision"
+        return self._request("POST", path, body=body)
+
     # ── Public display (no auth) ──
 
     def get_supported_symbols(self) -> dict:

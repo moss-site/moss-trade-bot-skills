@@ -163,6 +163,36 @@ class TestRecomputeAudit(unittest.TestCase):
             self.db_path, 99,
             surge_15m=0.0, rsi_14=50.0, chg_24h_pct=0.0,
         )
+        # Confirm no phantom row was inserted.
+        with db.get_conn(self.db_path) as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM decisions WHERE event_id=?", (99,)
+            ).fetchone()[0]
+        self.assertEqual(count, 0)
+
+
+    def test_record_recompute_audit_accepts_none_values(self):
+        db.upsert_event(self.db_path, {
+            "event_id": 7,
+            "hl_symbol": "ETH",
+            "trigger_ts": "2026-05-20T00:00:00Z",
+        })
+        db.record_decision(
+            self.db_path, 7, "short", "rule_short_momentum_init",
+            order_status="placed",
+        )
+        db.record_recompute_audit(
+            self.db_path, 7,
+            surge_15m=None, rsi_14=None, chg_24h_pct=None,
+        )
+        with db.get_conn(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT recompute_surge_15m, recompute_rsi_14, recompute_chg_24h_pct "
+                "FROM decisions WHERE event_id=?", (7,)
+            ).fetchone()
+        self.assertIsNone(row[0])
+        self.assertIsNone(row[1])
+        self.assertIsNone(row[2])
 
 
 if __name__ == "__main__":

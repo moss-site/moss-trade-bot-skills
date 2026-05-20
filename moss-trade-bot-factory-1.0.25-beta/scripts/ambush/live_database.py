@@ -161,8 +161,8 @@ def init_db(db_path: str) -> None:
             """
         )
         # Additive migration (2026-05-20): recompute audit columns. SQLite
-        # silently errors on ALTER TABLE if the column already exists, so
-        # guard with PRAGMA table_info to make re-init idempotent.
+        # raises sqlite3.OperationalError if the column already exists — guard
+        # with PRAGMA table_info check so subsequent inits are no-ops.
         existing_cols = {
             row[1] for row in conn.execute("PRAGMA table_info(decisions)")
         }
@@ -281,9 +281,9 @@ def record_recompute_audit(
 ) -> None:
     """Stamp the K-line-recomputed feature values on the decision row.
 
-    Idempotent UPDATE: if record_decision hasn't been called yet (race), the
-    UPDATE silently affects zero rows and the caller will re-stamp on its
-    next pass.
+    Overwriting UPDATE — last write wins. If record_decision hasn't been
+    called yet (race), the UPDATE silently affects zero rows and the caller
+    will re-stamp on its next pass.
     """
     with get_conn(db_path) as conn:
         conn.execute(

@@ -50,6 +50,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from ambush import decision as decision_mod
+from ambush import features, hyperliquid_candles
 from ambush import live_database as db
 from trading_client import TradingClient
 
@@ -107,10 +108,12 @@ class EventHandler:
         ambush_params: dict,
         *,
         max_notional_floor: float = 10.0,
+        kline_driven_open: bool = False,
     ):
         self.client = client
         self.ambush_params = ambush_params or {}
         self.max_notional_floor = float(max_notional_floor)
+        self.kline_driven_open = kline_driven_open
 
         # Cache side-specific + rhythm config; falls back to safe defaults
         # if the bot was created with a partial params blob (shouldn't
@@ -759,11 +762,15 @@ def resume_deferred_opens(handler: EventHandler, db_path: str) -> int:
 def process_event(
     handler: EventHandler,
     db_path: str,
-    direction: str,
-    event: dict,
-    source: str,
+    direction_or_event,
+    event: dict | None = None,
+    source: str = "unknown",
 ) -> None:
     """Process exactly one event envelope. Idempotent on event_id.
+
+    Supports two call styles for backward compatibility:
+      5-arg (existing callers): process_event(handler, db_path, direction, event, source)
+      4-arg (new tests/callers): process_event(handler, db_path, event, source=...)
 
     `source` is one of: "ws_bootstrap" / "ws_live" / "poll" — used for
     log tagging only; dedup is purely by event_id.
@@ -773,6 +780,15 @@ def process_event(
     their own retry semantics and we don't want one bad event to kill
     the consumer.
     """
+    # Compat shim: if direction_or_event is a dict, the caller used the
+    # 4-arg form (direction omitted); shift args accordingly.
+    if isinstance(direction_or_event, dict):
+        direction: str | None = None
+        event = direction_or_event
+        # `source` already captured from 4th positional / keyword arg
+    else:
+        direction = direction_or_event
+        # event and source already correctly bound
     try:
         event_id_raw = event.get("event_id")
         if event_id_raw is None:
@@ -824,7 +840,77 @@ def process_event(
             db.set_last_event_id_seen(db_path, event_id)
             return
 
-        decision = decision_mod.decision_from_event(event, direction)
+        # Resolve effective direction from handler if not supplied by caller.
+        effective_direction = (
+            direction or handler.ambush_params.get("direction") or "balanced"
+        ).lower()
+
+        # ── K-line recompute block ───────────────────────────────────────
+        # When kline_driven_open=True, fetch fresh 15m bars from Hyperliquid
+        # and recompute (surge_15m, rsi_14, chg_24h_pct) to replace the
+        # snapshot values frozen in the event envelope. This guards against
+        # acting on stale features from a delayed event delivery.
+        #
+        # sym_for_gates is defined later for the rhythm gates section, but we
+        # need the symbol here for the fetch call. Derive it eagerly.
+        sym_for_gates_early = str(event.get("hl_symbol") or "").strip().upper()
+
+        recompute_audit = None  # (surge, rsi, chg) tuple, or None if not attempted
+
+        if handler.kline_driven_open:
+            try:
+                bars = hyperliquid_candles.fetch(
+                    sym_for_gates_early or str(event.get("hl_symbol") or "").strip().upper(),
+                    interval="15m", limit=96,
+                )
+                if len(bars) >= 15:
+                    fresh = features.compute_features(bars)
+                    recompute_audit = (
+                        fresh["surge_15m"], fresh["rsi_14"], fresh["chg_24h_pct"],
+                    )
+                    # Patch the event envelope with fresh values; envelope is
+                    # local to this invocation — callers own the original dict.
+                    event = {**event,
+                             "surge_15m": str(fresh["surge_15m"]),
+                             "rsi_14": str(fresh["rsi_14"]),
+                             "change_before_24h_pct": str(fresh["chg_24h_pct"])}
+                    logger.info(
+                        "ambush handler: %s src=%s recomputed "
+                        "(surge=%.4f rsi=%.2f chg=%.4f) from %d bars",
+                        _format_event_brief(event), source,
+                        fresh["surge_15m"], fresh["rsi_14"], fresh["chg_24h_pct"], len(bars),
+                    )
+                else:
+                    logger.warning(
+                        "ambush handler: %s recompute skipped — only %d bars (need 15+); "
+                        "falling back to envelope snapshot",
+                        _format_event_brief(event), len(bars),
+                    )
+            except hyperliquid_candles.HyperliquidCandleError as e:
+                logger.warning(
+                    "ambush handler: %s K-line fetch failed (%s); "
+                    "falling back to envelope snapshot",
+                    _format_event_brief(event), e,
+                )
+
+        # Inner helper: stamp recompute audit columns onto the decision row,
+        # swallowing any exception so a stamp failure never crashes the handler.
+        def _stamp_audit() -> None:
+            if recompute_audit is None:
+                return
+            try:
+                db.record_recompute_audit(
+                    db_path, event_id,
+                    surge_15m=recompute_audit[0],
+                    rsi_14=recompute_audit[1],
+                    chg_24h_pct=recompute_audit[2],
+                )
+            except Exception as _e:
+                logger.warning(
+                    "ambush handler: stamp audit failed event_id=%d: %s", event_id, _e,
+                )
+
+        decision = decision_mod.decision_from_event(event, effective_direction)
         logger.info(
             "ambush handler: %s src=%s → %s/%s",
             _format_event_brief(event), source, decision.side, decision.reason,
@@ -833,6 +919,7 @@ def process_event(
         # SKIP: persist decision and move on.
         if decision.side == decision_mod.SIDE_SKIP:
             db.record_decision(db_path, event_id, decision.side, decision.reason)
+            _stamp_audit()
             db.mark_event_synced(db_path, event_id)
             db.set_last_event_id_seen(db_path, event_id)
             return
@@ -866,6 +953,7 @@ def process_event(
                             db_path, event_id, decision_mod.SIDE_SKIP, "same_coin_dedup",
                             error_msg=f"last open {_format_timedelta(age)} ago, dedup_days={dedup_days}",
                         )
+                        _stamp_audit()
                         db.mark_event_synced(db_path, event_id)
                         db.set_last_event_id_seen(db_path, event_id)
                         return
@@ -894,6 +982,7 @@ def process_event(
                             db_path, event_id, decision_mod.SIDE_SKIP, "cooldown_active",
                             error_msg=f"last close {_format_timedelta(age)} ago, cooldown_bars={cooldown_bars}",
                         )
+                        _stamp_audit()
                         db.mark_event_synced(db_path, event_id)
                         db.set_last_event_id_seen(db_path, event_id)
                         return
@@ -924,6 +1013,7 @@ def process_event(
                     db_path, event_id, decision_mod.SIDE_SKIP, "max_trades_reached",
                     error_msg=f"event_id {event_id} already has {already_opened_count} trade(s); cap=1",
                 )
+                _stamp_audit()
                 db.mark_event_synced(db_path, event_id)
                 db.set_last_event_id_seen(db_path, event_id)
                 return
@@ -940,6 +1030,7 @@ def process_event(
                 db_path, event_id, decision.side, decision.reason,
                 order_status="rejected", error_msg="notional_zero",
             )
+            _stamp_audit()
             db.set_last_event_id_seen(db_path, event_id)
             return
 
@@ -953,6 +1044,7 @@ def process_event(
                 db_path, event_id, decision.side, decision.reason,
                 order_status="rejected", error_msg="empty_symbol",
             )
+            _stamp_audit()
             db.set_last_event_id_seen(db_path, event_id)
             return
 
@@ -999,6 +1091,7 @@ def process_event(
                 order_status="rejected",
                 error_msg=f"already holding {held_sym} qty={qty}, cannot open {target_symbol}",
             )
+            _stamp_audit()
             db.mark_event_synced(db_path, event_id)
             db.set_last_event_id_seen(db_path, event_id)
             handler.client.symbol = prev_symbol
@@ -1064,6 +1157,7 @@ def process_event(
                 reason=decision.reason,
                 error_msg=f"deferred {delay_seconds}s ({delay_param_name}={delay_bars} bars)",
             )
+            _stamp_audit()
             db.mark_event_synced(db_path, event_id)
             db.set_last_event_id_seen(db_path, event_id)
             handler.client.symbol = prev_symbol
@@ -1101,6 +1195,7 @@ def process_event(
                 db_path, event_id, decision.side, decision.reason,
                 order_status="failed", error_msg=str(e),
             )
+            _stamp_audit()
             db.set_last_event_id_seen(db_path, event_id)
             handler.client.symbol = prev_symbol
             return
@@ -1119,6 +1214,7 @@ def process_event(
             db_path, event_id, decision.side, decision.reason,
             order_id=order_id, order_status=status, error_msg=err,
         )
+        _stamp_audit()
         if status == "placed":
             db.mark_event_synced(db_path, event_id)
             # Record successful open for downstream rhythm gates

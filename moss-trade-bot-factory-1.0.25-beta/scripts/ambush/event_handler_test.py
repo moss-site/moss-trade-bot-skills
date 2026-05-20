@@ -13,8 +13,13 @@ import sys
 import tempfile
 import unittest
 import json
-from datetime import timezone
+from datetime import datetime, timezone, timedelta
+from unittest.mock import MagicMock, patch
 from urllib.request import urlopen
+
+
+def _utc(i: int) -> datetime:
+    return datetime(2026, 5, 19, tzinfo=timezone.utc) + timedelta(minutes=15 * i)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPTS = os.path.dirname(_HERE)
@@ -193,6 +198,104 @@ class TestRecomputeAudit(unittest.TestCase):
         self.assertIsNone(row[0])
         self.assertIsNone(row[1])
         self.assertIsNone(row[2])
+
+
+class TestKlineDrivenOpen(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.tmpdir, "kdo.db")
+        db.init_db(self.db_path)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _make_handler(self, kline_driven_open: bool):
+        client = MagicMock()
+        ambush_params = {
+            "direction": "balanced",
+            "long_params": {"leverage": 3, "position_pct": 0.20,
+                            "stop_loss_pct": 0.08, "trailing_pct": 0.30,
+                            "max_hold_hours": 30, "momentum_bars": 0,
+                            "cooldown_bars": 1},
+            "short_params": {"leverage": 3, "position_pct": 0.20,
+                             "stop_loss_pct": 0.40, "trailing_pct": 0.25,
+                             "max_hold_hours": 168, "cooldown_bars": 15,
+                             "entry_delay_bars": 16},
+            "rhythm": {"max_trades_per_event": 1, "same_coin_dedup_days": 0},
+        }
+        return event_handler.EventHandler(client, ambush_params,
+                                          kline_driven_open=kline_driven_open)
+
+    @patch("ambush.event_handler.hyperliquid_candles.fetch")
+    def test_recompute_replaces_snapshot_when_flag_on(self, mock_fetch):
+        # Envelope says rule_long_momentum_init shape; recompute produces SKIP.
+        mock_fetch.return_value = [
+            {"open": 100, "high": 100, "low": 100, "close": 100,
+             "ts": _utc(i)} for i in range(96)
+        ]  # surge=0, rsi=neutral, chg=0 → SKIP
+        h = self._make_handler(kline_driven_open=True)
+        now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        event = {
+            "event_id": 1,
+            "hl_symbol": "SAGA",
+            "trigger_ts": now_ts,
+            "trigger_price": "0.02",
+            "surge_15m": "0.12",   # envelope says momentum_init
+            "rsi_14": "55",
+            "change_before_24h_pct": "8",
+        }
+        # Just call process_event and assert the audit columns are stamped
+        # with the recompute values (not the snapshot).
+        event_handler.process_event(h, self.db_path, event, source="ws_live")
+        with db.get_conn(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT decision, recompute_surge_15m, recompute_rsi_14, recompute_chg_24h_pct "
+                "FROM decisions WHERE event_id=?", (1,)
+            ).fetchone()
+        self.assertEqual(row[0], "skip")
+        self.assertAlmostEqual(row[1], 0.0, places=4)
+        self.assertAlmostEqual(row[3], 0.0, places=4)
+
+    @patch("ambush.event_handler.hyperliquid_candles.fetch")
+    def test_fetch_failure_falls_back_to_snapshot(self, mock_fetch):
+        mock_fetch.side_effect = event_handler.hyperliquid_candles.HyperliquidCandleError("502")
+        h = self._make_handler(kline_driven_open=True)
+        now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        event = {
+            "event_id": 2,
+            "hl_symbol": "SAGA",
+            "trigger_ts": now_ts,
+            "trigger_price": "0.02",
+            "surge_15m": "0.30",   # rule_short_spike_extreme
+            "rsi_14": "50",
+            "change_before_24h_pct": "5",
+        }
+        event_handler.process_event(h, self.db_path, event, source="ws_live")
+        with db.get_conn(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT decision, reason FROM decisions WHERE event_id=?", (2,)
+            ).fetchone()
+        # Falls back to envelope → short_spike_extreme would be deferred,
+        # so decision is "short" with a deferred reason. Either way decision
+        # is not "skip" (which is what happens on fetch error blocking).
+        self.assertIn(row[0], ("short",))
+
+    def test_flag_off_uses_envelope_unchanged(self):
+        h = self._make_handler(kline_driven_open=False)
+        # Note: we don't even patch hyperliquid_candles.fetch — flag off
+        # means we never call it. If we did, the test would error.
+        now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        event = {
+            "event_id": 3, "hl_symbol": "SAGA",
+            "trigger_ts": now_ts, "trigger_price": "0.02",
+            "surge_15m": "0.30", "rsi_14": "50", "change_before_24h_pct": "5",
+        }
+        event_handler.process_event(h, self.db_path, event, source="ws_live")
+        with db.get_conn(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT decision FROM decisions WHERE event_id=?", (3,)
+            ).fetchone()
+        self.assertEqual(row[0], "short")
 
 
 if __name__ == "__main__":

@@ -435,7 +435,7 @@ def _evaluate_position_kline_driven(
         else:
             pnl_pct = (entry - last_close) / entry
         leverage = int(pos.get("leverage") or 1)
-        if pnl_pct * leverage <= -sl_dist * leverage:
+        if pnl_pct <= -sl_dist:
             _close_now(
                 client, db_path, symbol, side, "atr_stop_loss",
                 extras={
@@ -465,7 +465,7 @@ def _close_now(
     Uses the call-scoped ``symbol=`` override on close_position (no
     client.symbol mutation needed).
     """
-    extras_str = " " + " ".join(f"{k}={v}" for k, v in (extras or {}).items())
+    extras_str = (" " + " ".join(f"{k}={v}" for k, v in extras.items())) if extras else ""
     logger.info(
         "close_monitor: closing %s side=%s reason=%s%s", symbol, side, reason, extras_str
     )

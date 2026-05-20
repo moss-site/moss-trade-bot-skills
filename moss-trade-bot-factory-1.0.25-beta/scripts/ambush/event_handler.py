@@ -97,9 +97,14 @@ class EventHandler:
     """Holds the per-bot context needed to convert an event into an order.
 
     The handler is constructed once per live-runner process and reused
-    across WS bootstrap / WS live / REST poller channels. It is NOT
-    thread-safe — callers serialize via `live_database._lock` plus
-    asyncio event loop ordering.
+    across WS bootstrap / WS live / REST poller channels.
+
+    Thread-safety: concurrent calls to `process_event` are serialized by
+    `self._position_lock` (threading.RLock). The lock covers the
+    read-positions-then-open-order sequence so two events arriving on
+    different threads (WS + poller, WS + deferred-open daemon) cannot both
+    pass the single-position pre-check on stale reads. See §C2 of the
+    ambush-qa-followups plan.
     """
 
     def __init__(
@@ -121,6 +126,19 @@ class EventHandler:
         self.long_cfg = self.ambush_params.get("long_params") or {}
         self.short_cfg = self.ambush_params.get("short_params") or {}
         self.rhythm_cfg = self.ambush_params.get("rhythm") or {}
+
+        # Position-lock serialization: process_event() callers from WS,
+        # poller, and deferred-open daemon thread share this lock so the
+        # read-positions-then-open sequence is atomic relative to other
+        # process_event invocations on the same handler. Server-side
+        # enforceAmbushPositionLock is the cross-process safety net;
+        # this RLock just closes the same-process race so we don't burn
+        # an HMAC round-trip on guaranteed-rejected duplicate orders.
+        # RLock (not Lock) to allow re-entry from the same thread —
+        # necessary because _run_deferred_open also acquires the lock
+        # and may be called from within a locked context in tests.
+        # See ambush-qa-followups §C2.
+        self._position_lock = threading.RLock()
 
     def _side_cfg(self, side: str) -> dict:
         """Per-direction params bag."""
@@ -697,21 +715,27 @@ def _run_deferred_open(
                     event_id, e,
                 )
 
-        prev_symbol = handler.client.symbol
-        handler.client.symbol = target_symbol
-        try:
-            if decision.side == decision_mod.SIDE_LONG:
-                result = handler.client.open_long(
-                    f"{notional:.2f}", leverage, client_order_id,
-                    reasoning_zh, reasoning_en,
-                )
-            else:
-                result = handler.client.open_short(
-                    f"{notional:.2f}", leverage, client_order_id,
-                    reasoning_zh, reasoning_en,
-                )
-        finally:
-            handler.client.symbol = prev_symbol
+        # Acquire position lock around the order submission so this deferred
+        # firing is serialized against any concurrent process_event call on
+        # the same handler. Without the lock, a WS event arriving just as
+        # the deferred open fires could both pass the single-position
+        # pre-check on the same stale position list. See ambush-qa-followups §C2.
+        with handler._position_lock:
+            prev_symbol = handler.client.symbol
+            handler.client.symbol = target_symbol
+            try:
+                if decision.side == decision_mod.SIDE_LONG:
+                    result = handler.client.open_long(
+                        f"{notional:.2f}", leverage, client_order_id,
+                        reasoning_zh, reasoning_en,
+                    )
+                else:
+                    result = handler.client.open_short(
+                        f"{notional:.2f}", leverage, client_order_id,
+                        reasoning_zh, reasoning_en,
+                    )
+            finally:
+                handler.client.symbol = prev_symbol
         status, order_id, err = _classify_order_status(result)
         logger.info(
             "ambush handler: deferred-open event_id=%d %s status=%s order_id=%s err=%s",
@@ -838,7 +862,30 @@ def process_event(
     event: dict,
     source: str = "unknown",
 ) -> None:
-    """Process exactly one event envelope. Idempotent on event_id.
+    """Public entry point — serializes concurrent calls on the same handler.
+
+    WS thread, poller thread, and deferred-open daemon thread can all call
+    this concurrently. The per-handler RLock ensures the
+    read-positions-then-open-order sequence is atomic relative to other
+    process_event invocations on the same handler instance, closing the
+    same-process race that would otherwise let two events both pass the
+    single-position pre-check on a stale position list.
+
+    Server-side enforceAmbushPositionLock remains the cross-process safety
+    net; this lock just avoids burning an HMAC round-trip on a
+    guaranteed-rejected duplicate. See ambush-qa-followups §C2.
+    """
+    with handler._position_lock:
+        return _process_event_locked(handler, db_path, event, source)
+
+
+def _process_event_locked(
+    handler: EventHandler,
+    db_path: str,
+    event: dict,
+    source: str = "unknown",
+) -> None:
+    """Inner implementation of process_event — called under handler._position_lock.
 
     `source` is one of: "ws_bootstrap" / "ws_live" / "poll" — used for
     log tagging only; dedup is purely by event_id.

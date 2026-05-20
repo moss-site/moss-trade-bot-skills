@@ -531,5 +531,126 @@ class TestDeferredOpenRecompute(unittest.TestCase):
         client.open_short.assert_called_once()
 
 
+class TestPositionLockSerializesConcurrent(unittest.TestCase):
+    """C2: handler._position_lock (RLock) serializes concurrent process_event calls.
+
+    Without the lock, two events arriving simultaneously on WS + poller
+    threads can both pass the single-position pre-check before either has
+    written. With the lock, the second call blocks until the first releases.
+    """
+
+    def setUp(self):
+        import threading as _threading
+        import time as _time
+        self._threading = _threading
+        self._time = _time
+        self.tmpdir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.tmpdir, "lock_test.db")
+        db.init_db(self.db_path)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_position_lock_is_reentrant(self):
+        """RLock allows same-thread re-entry; recursive process_event calls
+        from within a process_event (rare but possible via callbacks) don't
+        deadlock. Also validates the lock field is present."""
+        handler = event_handler.EventHandler(
+            MagicMock(),
+            {"long_params": {}, "short_params": {}, "rhythm": {}},
+        )
+        # Acquire twice from same thread — must not deadlock.
+        with handler._position_lock:
+            with handler._position_lock:
+                pass  # re-entry must succeed
+
+    def test_concurrent_process_event_calls_serialize_on_lock(self):
+        """Two concurrent process_event calls must serialize via handler._position_lock.
+
+        Thread A holds the lock (simulated via slow list_positions).
+        Thread B must block at the lock acquisition and must NOT call
+        list_positions until A releases. This verifies the race window is
+        closed at the skill level. Server-side enforceAmbushPositionLock
+        remains the cross-process safety net.
+        """
+        threading = self._threading
+        time = self._time
+
+        barrier_acquired = threading.Event()
+        can_proceed = threading.Event()
+        call_order = []
+
+        # Slow down get_positions so the race window is observable:
+        # thread A will be stuck inside the lock while thread B tries to enter.
+        def slow_list_positions(*a, **kw):
+            call_order.append("list_positions")
+            barrier_acquired.set()      # signal that A is inside the lock
+            can_proceed.wait(timeout=2.0)  # hold A until the test releases it
+            return []                   # no positions → no lock reject
+
+        client = MagicMock()
+        # Return a real account dict so _compute_notional produces non-zero notional.
+        client.get_account.return_value = {"wallet_balance": "1000"}
+        # get_positions is the method called in the single-position pre-check.
+        # Patch it with the slow version so thread A stays inside the lock.
+        client.get_positions.side_effect = slow_list_positions
+        client.open_short.return_value = {"order_id": "o1"}
+        client.post_ambush_decision.return_value = {"ok": True}
+
+        handler = event_handler.EventHandler(
+            client,
+            {
+                # Non-empty params so _compute_notional picks up position_pct
+                # and decision path reaches the single-position pre-check.
+                "long_params": {"position_pct": "0.10", "leverage": 1},
+                "short_params": {"position_pct": "0.10", "leverage": 1},
+                "rhythm": {},
+            },
+            kline_driven_open=False,  # skip K-line fetch
+        )
+
+        now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        event_a = {
+            "event_id": 9001, "hl_symbol": "AAA",
+            "trigger_ts": now_ts, "trigger_price": "1",
+            "surge_15m": "0.30", "rsi_14": "50", "change_before_24h_pct": "5",
+        }
+        event_b = {**event_a, "event_id": 9002, "hl_symbol": "BBB"}
+
+        t_a = threading.Thread(
+            target=event_handler.process_event,
+            args=(handler, self.db_path, event_a, "ws_live"),
+            name="test-thread-A",
+        )
+        t_b = threading.Thread(
+            target=event_handler.process_event,
+            args=(handler, self.db_path, event_b, "ws_live"),
+            name="test-thread-B",
+        )
+
+        t_a.start()
+        # Wait until thread A has acquired the lock and entered list_positions.
+        barrier_acquired.wait(timeout=2.0)
+        t_b.start()
+        # Give thread B a moment to reach the lock acquisition attempt.
+        time.sleep(0.1)
+
+        # At this point thread A is still inside the locked region (blocked
+        # on can_proceed). Thread B must be blocked on the lock — it should
+        # NOT have called get_positions yet.
+        positions_called_count = len([c for c in call_order if c == "list_positions"])
+        self.assertEqual(
+            positions_called_count, 1,
+            f"expected thread B to be blocked on lock, but call_order={call_order}",
+        )
+
+        # Release thread A; both threads should now complete cleanly.
+        can_proceed.set()
+        t_a.join(timeout=3.0)
+        t_b.join(timeout=3.0)
+        self.assertFalse(t_a.is_alive(), "thread A should have completed")
+        self.assertFalse(t_b.is_alive(), "thread B should have completed")
+
+
 if __name__ == "__main__":
     unittest.main()

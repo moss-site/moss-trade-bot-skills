@@ -147,7 +147,7 @@ async def run_close_monitor(
     When ``kline_driven=True``, each position is evaluated via the
     K-line cascade (_evaluate_position_kline_driven) which fetches live
     15m bars from Hyperliquid and applies priority-ordered exit logic
-    (ATR stop_loss → trailing → max_hold → signal_reverse). Falls back
+    (ATR stop_loss → max_hold → trailing → signal_reverse). Falls back
     to the legacy intratick path on fetch failure.
     """
     logger.info(

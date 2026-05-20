@@ -115,8 +115,11 @@ class TestKlineCloseCascade(unittest.TestCase):
 
     @patch("ambush.close_monitor.hyperliquid_candles.fetch")
     def test_hold_when_no_exit_condition_met(self, mock_fetch):
-        # Long, entry=100, mark=102, ATR=1 → sl_dist=2%, pnl=2% — no exit.
-        bars = _bars_with_atr(entry=102.0, atr_target=1.0)
+        # Long, entry=100, mark=102. Flat bars at 102 → ATR~0, surge=0,
+        # chg_24h_pct=0, drift=0%, max_hold not reached — no exit fires.
+        bars = [{"open": 102, "high": 102, "low": 102, "close": 102,
+                 "ts": _now() - timedelta(minutes=15 * i)} for i in range(96)]
+        bars.reverse()
         mock_fetch.return_value = bars
         pos = {
             "symbol": "TSTUSDC", "side": "long", "net_qty": "100",
@@ -267,6 +270,68 @@ class TestKlineTrailing(TestKlineCloseCascade):
             kline_driven=True,
         )
         self.client.close_position.assert_called_once()
+
+
+class TestKlineMaxHold(TestKlineCloseCascade):
+    @patch("ambush.close_monitor.hyperliquid_candles.fetch")
+    def test_long_max_hold_triggers_after_hours_exceeded(self, mock_fetch):
+        # 96 flat bars, no ATR / no trailing trigger; opened_at = 31h ago,
+        # max_hold_hours = 30 → max_hold triggers.
+        bars = [{"open": 100, "high": 100, "low": 100, "close": 100,
+                 "ts": _now() - timedelta(minutes=15 * i)} for i in range(96)]
+        bars.reverse()
+        mock_fetch.return_value = bars
+        pos = {
+            "symbol": "TSTUSDC", "side": "long", "net_qty": "100",
+            "entry_price": "100", "mark_price": "100", "leverage": 3,
+        }
+        opened_at = (datetime.now(timezone.utc) - timedelta(hours=31)).isoformat()
+        db.upsert_position_state(
+            self.db_path, symbol="TSTUSDC", side="long",
+            entry_price="100", opened_at=opened_at, peak_price="100",
+        )
+        close_monitor._evaluate_position(
+            self.client, self.db_path, self._ambush_params(),
+            pos, "TSTUSDC", Decimal("100"),
+            kline_driven=True,
+        )
+        self.client.close_position.assert_called_once()
+        kwargs = self.client.close_position.call_args.kwargs
+        self.assertIn("max_hold", str(kwargs.get("reasoning", "")))
+
+
+class TestKlineSignalReverse(TestKlineCloseCascade):
+    @patch("ambush.close_monitor.hyperliquid_candles.fetch")
+    def test_long_position_with_short_signal_triggers_reverse(self, mock_fetch):
+        # Long position; last bar surge >0.25 fires rule_short_spike_extreme.
+        bars = [{"open": 100, "high": 100, "low": 100, "close": 100,
+                 "ts": _now() - timedelta(minutes=15 * i)} for i in range(95)]
+        bars.reverse()
+        bars.append({"open": 100, "high": 140, "low": 100, "close": 130,
+                     "ts": _now()})
+        mock_fetch.return_value = bars
+        pos = {
+            "symbol": "TSTUSDC", "side": "long", "net_qty": "100",
+            "entry_price": "120", "mark_price": "130", "leverage": 3,
+        }
+        # ATR on flat-then-spike bars: low TR avg → ATR small → no ATR stop.
+        # Trailing: peak=130, last=130 → drift 0%, no trailing.
+        # max_hold: opened just now → not yet.
+        # signal_reverse: rule_short_spike_extreme fires → close.
+        db.upsert_position_state(
+            self.db_path, symbol="TSTUSDC", side="long",
+            entry_price="120",
+            opened_at=datetime.now(timezone.utc).isoformat(),
+            peak_price="130",
+        )
+        close_monitor._evaluate_position(
+            self.client, self.db_path, self._ambush_params(),
+            pos, "TSTUSDC", Decimal("100"),
+            kline_driven=True,
+        )
+        self.client.close_position.assert_called_once()
+        kwargs = self.client.close_position.call_args.kwargs
+        self.assertIn("signal_reverse", str(kwargs.get("reasoning", "")))
 
 
 def _now():

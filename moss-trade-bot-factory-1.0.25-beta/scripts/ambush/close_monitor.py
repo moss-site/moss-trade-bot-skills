@@ -47,6 +47,8 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
+from ambush import decision as decision_mod
+from ambush import features
 from ambush import hyperliquid_candles, indicators, live_database as db
 from trading_client import TradingClient
 
@@ -402,12 +404,10 @@ def _evaluate_position_kline_driven(
 ) -> None:
     """K-line cascade: fetch 15m bars, apply priority-ordered exit logic.
 
-    Priority 1 (T8): ATR stop_loss.
-    Priority 2 (T10-next): max_hold — placeholder comment, added next task.
-    Priority 3 (T9, this task): K-line-close trailing — ratchets peak/trough
-        on each tick using latest K-line close; fires _close_now("trailing")
-        when drift from peak exceeds trailing_pct.
-    Priority 4 (future): signal_reverse.
+    1. ATR stop_loss
+    2. max_hold
+    3. K-line-close trailing
+    4. signal_reverse
     """
     side = "long" if net_qty > 0 else "short"
     entry = _parse_decimal(pos.get("entry_price", "0"))
@@ -430,7 +430,7 @@ def _evaluate_position_kline_driven(
     side_cfg = ambush_params.get(f"{side}_params", {}) or {}
     sl_atr_mult = Decimal(str(side_cfg.get("sl_atr_mult", 2.0 if side == "long" else 2.5)))
 
-    # Priority 1: ATR stop_loss
+    # 1. ATR stop_loss
     if atr > 0:
         sl_dist = sl_atr_mult * atr / entry
         if side == "long":
@@ -448,9 +448,30 @@ def _evaluate_position_kline_driven(
             )
             return
 
-    # max_hold — added in T10 at priority 2 (between ATR and trailing).
-    # K-line-close trailing (priority 3 after T10; currently runs at slot 2).
+    # Load state once; reused by max_hold (priority 2) and trailing (priority 3).
     state = db.get_position_state(db_path, symbol)
+
+    # 2. max_hold
+    max_hold_hours = int(side_cfg.get("max_hold_hours", 168))
+    opened_at_str = state.get("opened_at") if state else None
+    if opened_at_str:
+        try:
+            opened_at = datetime.fromisoformat(opened_at_str)
+            elapsed_hours = (datetime.now(timezone.utc) - opened_at).total_seconds() / 3600
+            if elapsed_hours >= max_hold_hours:
+                _close_now(
+                    client, db_path, symbol, side, "max_hold",
+                    extras={"elapsed_hours": f"{elapsed_hours:.2f}",
+                            "max_hold_hours": str(max_hold_hours)},
+                )
+                return
+        except (ValueError, TypeError):
+            logger.warning(
+                "close_monitor: %s bad opened_at %r — skipping max_hold check",
+                symbol, opened_at_str,
+            )
+
+    # 3. K-line-close trailing
     trailing_pct = Decimal(str(side_cfg.get("trailing_pct", 0.25)))
     if state is None:
         # Bootstrap with current K-line close as initial peak.
@@ -482,6 +503,32 @@ def _evaluate_position_kline_driven(
                     "drift_pct": str(drift), "trailing_pct": str(trailing_pct)},
         )
         return
+
+    # 4. signal_reverse
+    try:
+        fresh = features.compute_features(bars)
+        direction = (ambush_params.get("direction") or "balanced").lower()
+        fresh_dec = decision_mod.decide(decision_mod.DecisionInput(
+            surge_15m=fresh["surge_15m"],
+            rsi_14=fresh["rsi_14"],
+            chg_before_24h=fresh["chg_24h_pct"],
+            direction=direction,
+        ))
+        if (side == "long" and fresh_dec.side == decision_mod.SIDE_SHORT) or \
+           (side == "short" and fresh_dec.side == decision_mod.SIDE_LONG):
+            _close_now(
+                client, db_path, symbol, side, "signal_reverse",
+                extras={"opposite_rule": fresh_dec.reason,
+                        "fresh_surge_15m": f"{fresh['surge_15m']:.4f}",
+                        "fresh_rsi_14": f"{fresh['rsi_14']:.2f}",
+                        "fresh_chg_24h_pct": f"{fresh['chg_24h_pct']:.4f}"},
+            )
+            return
+    except Exception as e:
+        logger.warning(
+            "close_monitor: signal_reverse compute failed for %s — holding: %s",
+            symbol, e,
+        )
 
 
 def _close_now(

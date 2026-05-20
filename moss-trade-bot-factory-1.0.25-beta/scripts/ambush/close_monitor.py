@@ -47,7 +47,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
-from ambush import live_database as db
+from ambush import hyperliquid_candles, indicators, live_database as db
 from trading_client import TradingClient
 
 
@@ -134,17 +134,24 @@ async def run_close_monitor(
     stop_event: asyncio.Event,
     *,
     tick_seconds: int = DEFAULT_TICK_SECONDS,
+    kline_driven: bool = False,
 ) -> None:
     """asyncio entry — runs until stop_event is set.
 
     Wrapped in a top-level try/except so any unexpected raise out of the
     inner await chain is surfaced loudly instead of being swallowed by
     asyncio.gather(..., return_exceptions=True) in the runner.
+
+    When ``kline_driven=True``, each position is evaluated via the
+    K-line cascade (_evaluate_position_kline_driven) which fetches live
+    15m bars from Hyperliquid and applies priority-ordered exit logic
+    (ATR stop_loss → trailing → max_hold → signal_reverse). Falls back
+    to the legacy intratick path on fetch failure.
     """
     logger.info(
-        "ambush close_monitor: started tick=%ds (skill owns trailing+max_hold; "
+        "ambush close_monitor: started tick=%ds kline_driven=%s (skill owns trailing+max_hold; "
         "server owns stop_loss floor)",
-        tick_seconds,
+        tick_seconds, kline_driven,
     )
     tick_count = 0
     heartbeat_every = max(1, int(60 / max(1, tick_seconds)))  # ~1/min
@@ -157,7 +164,7 @@ async def run_close_monitor(
                 pass
             try:
                 await asyncio.get_event_loop().run_in_executor(
-                    None, _run_tick, client, db_path, ambush_params
+                    None, _run_tick, client, db_path, ambush_params, kline_driven
                 )
             except Exception as e:
                 logger.exception("ambush close_monitor: tick failed: %s", e)
@@ -170,7 +177,12 @@ async def run_close_monitor(
     logger.info("ambush close_monitor: stopped")
 
 
-def _run_tick(client: TradingClient, db_path: str, ambush_params: dict) -> None:
+def _run_tick(
+    client: TradingClient,
+    db_path: str,
+    ambush_params: dict,
+    kline_driven: bool = False,
+) -> None:
     """One synchronous tick — get positions, evaluate, close on hit."""
     try:
         positions = client.get_positions() or []
@@ -188,7 +200,10 @@ def _run_tick(client: TradingClient, db_path: str, ambush_params: dict) -> None:
         if not symbol:
             continue
         open_symbols.add(symbol)
-        _evaluate_position(client, db_path, ambush_params, pos, symbol, net_qty)
+        _evaluate_position(
+            client, db_path, ambush_params, pos, symbol, net_qty,
+            kline_driven=kline_driven,
+        )
 
     # Garbage-collect local rows for symbols no longer open. Two close
     # channels reach here:
@@ -245,6 +260,30 @@ def _run_tick(client: TradingClient, db_path: str, ambush_params: dict) -> None:
 
 
 def _evaluate_position(
+    client: TradingClient,
+    db_path: str,
+    ambush_params: dict,
+    pos: dict,
+    symbol: str,
+    net_qty: Decimal,
+    *,
+    kline_driven: bool = False,
+) -> None:
+    """Dispatch to K-line cascade or legacy intratick path."""
+    if not kline_driven:
+        _evaluate_position_legacy(client, db_path, ambush_params, pos, symbol, net_qty)
+        return
+    try:
+        _evaluate_position_kline_driven(client, db_path, ambush_params, pos, symbol, net_qty)
+    except hyperliquid_candles.HyperliquidCandleError as e:
+        logger.warning(
+            "close_monitor: K-line fetch failed for %s (%s); falling back to legacy intratick path",
+            symbol, e,
+        )
+        _evaluate_position_legacy(client, db_path, ambush_params, pos, symbol, net_qty)
+
+
+def _evaluate_position_legacy(
     client: TradingClient,
     db_path: str,
     ambush_params: dict,
@@ -351,6 +390,115 @@ def _evaluate_position(
         )
     finally:
         client.symbol = prev_symbol
+
+
+def _evaluate_position_kline_driven(
+    client: TradingClient,
+    db_path: str,
+    ambush_params: dict,
+    pos: dict,
+    symbol: str,
+    net_qty: Decimal,
+) -> None:
+    """K-line cascade: fetch 15m bars, apply priority-ordered exit logic.
+
+    Priority 1 (this task): ATR stop_loss.
+    Priority 2-4 (T9-T10):  trailing, max_hold, signal_reverse — currently
+    fall through to legacy for those checks.
+    """
+    side = "long" if net_qty > 0 else "short"
+    entry = _parse_decimal(pos.get("entry_price", "0"))
+    if entry <= 0:
+        return  # bad data, skip
+
+    # HL base symbol = strip USDC suffix
+    base = symbol[:-4] if symbol.upper().endswith("USDC") else symbol
+    bars = hyperliquid_candles.fetch(base, interval="15m", limit=96)
+    if len(bars) < 15:
+        logger.warning(
+            "close_monitor: %s only %d bars from HL (need 15+); falling back to legacy",
+            symbol, len(bars),
+        )
+        _evaluate_position_legacy(client, db_path, ambush_params, pos, symbol, net_qty)
+        return
+
+    last_close = Decimal(str(bars[-1]["close"]))
+    atr = Decimal(str(indicators.compute_atr(bars, period=14)))
+    side_cfg = ambush_params.get(f"{side}_params", {}) or {}
+    sl_atr_mult = Decimal(str(side_cfg.get("sl_atr_mult", 2.0 if side == "long" else 2.5)))
+
+    # Priority 1: ATR stop_loss
+    if atr > 0:
+        sl_dist = sl_atr_mult * atr / entry
+        if side == "long":
+            pnl_pct = (last_close - entry) / entry
+        else:
+            pnl_pct = (entry - last_close) / entry
+        leverage = int(pos.get("leverage") or 1)
+        if pnl_pct * leverage <= -sl_dist * leverage:
+            _close_now(
+                client, db_path, symbol, side, "atr_stop_loss",
+                extras={
+                    "atr": str(atr), "sl_dist_pct": str(sl_dist),
+                    "last_close": str(last_close), "entry": str(entry),
+                },
+            )
+            return
+
+    # Priorities 2-4 added in T9-T10. Fall back to legacy for
+    # trailing, max_hold, and signal_reverse checks.
+    _evaluate_position_legacy(client, db_path, ambush_params, pos, symbol, net_qty)
+
+
+def _close_now(
+    client: TradingClient,
+    db_path: str,
+    symbol: str,
+    side: str,
+    reason: str,
+    *,
+    extras: dict | None = None,
+) -> None:
+    """Place a close order, delete position state, and record symbol action.
+
+    Wraps client.close_position in try/except — never crashes the monitor.
+    Uses the call-scoped ``symbol=`` override on close_position (no
+    client.symbol mutation needed).
+    """
+    extras_str = " " + " ".join(f"{k}={v}" for k, v in (extras or {}).items())
+    logger.info(
+        "close_monitor: closing %s side=%s reason=%s%s", symbol, side, reason, extras_str
+    )
+    result = None
+    try:
+        result = client.close_position(
+            position_side=side,
+            symbol=symbol,
+            reasoning="异动 close ({})".format(reason),
+            reasoning_en="ambush_close: {}".format(reason),
+        )
+        logger.info(
+            "ambush close_monitor: closed %s reason=%s result=%s",
+            symbol, reason, _summarize_close_result(result),
+        )
+    except Exception as e:
+        logger.warning(
+            "close_monitor: close failed %s reason=%s err=%s", symbol, reason, e
+        )
+        return
+    db.delete_position_state(db_path, symbol)
+    base = symbol[:-4] if symbol.upper().endswith("USDC") else symbol
+    order_id_str = None
+    if isinstance(result, dict):
+        order = result.get("order") or {}
+        if isinstance(order, dict) and order.get("order_id"):
+            order_id_str = str(order["order_id"])
+    try:
+        db.record_symbol_action(db_path, base, "close", order_id=order_id_str)
+    except Exception as e:
+        logger.warning(
+            "close_monitor: failed to record symbol_action close for %s: %s", base, e
+        )
 
 
 def _summarize_close_result(result) -> str:

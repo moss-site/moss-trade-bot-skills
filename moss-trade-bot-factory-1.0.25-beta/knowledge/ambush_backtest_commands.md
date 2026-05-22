@@ -31,16 +31,16 @@ python3 {baseDir}/scripts/ambush/backtest.py \
 
 `--dump-trades 3` 让 backtest 额外打印最差 3 笔 + 最好 3 笔的明细（供用户感性感受 "这种 case 会亏 / 那种 case 会赚"，比单纯看胜率直观）。
 
-`/tmp/ambush_params.json` 由 `propose.py` 上一步产出，**双通道结构**（long_params 和 short_params 各自独立）：
+`/tmp/ambush_params.json` 由 `propose.py` 上一步产出，**双通道结构**（long_params 和 short_params 各自独立）。其中 `trigger` 只给本地回测用，固定使用后端 env 默认值；创建 bot 时不会提交给后端：
 
 ```json
 {
   "strategy_type": "ambush",
   "direction": "balanced",
   "trigger": {
-    "oi_mc_threshold": 0.35,
-    "z_score_threshold": 2.0,
-    "surge_15m_threshold": 0.10
+    "oi_mc_threshold": 0.20,
+    "z_score_threshold": 2.5,
+    "surge_15m_threshold": 0.08
   },
   "long_params": {
     "leverage": 3,
@@ -68,6 +68,8 @@ python3 {baseDir}/scripts/ambush/backtest.py \
 ```
 
 > ⚠️ 即便用户选 `direction=long`，propose.py 仍要填 `short_params` 默认值（避免后悔改 direction 后丢参数）。回测方向语义和实盘一致：每个事件先按规则信号判 `long` / `short` / `skip`；`direction=long` / `short` 只放行同方向信号，反方向记为 `direction_mismatch` 并 skip；`direction=balanced` 放行 long 和 short，并使用命中方向对应 params。
+>
+> ⚠️ `trigger` 不是生成的 bot 参数。实盘触发阈值由后端统一 env 控制：`AMBUSH_OI_MC_THRESHOLD=0.20`、`AMBUSH_Z_SCORE_THRESHOLD=2.5`、`AMBUSH_SURGE_15M_THRESHOLD=0.08`（除非部署环境显式覆盖）。
 
 ## 输出格式
 

@@ -7,9 +7,9 @@
 ## 决策骨架
 
 ```
-每小时全市场扫描 → OI/MC ≥ trigger.oi_mc_threshold        ⇒ 加观察名单
-观察名单 OI 监控 → Z-Score > trigger.z_score_threshold     ⇒ 双门 ① 通过
-15m K线        → 涨幅 ≥ trigger.surge_15m_threshold       ⇒ 双门 ② 通过
+每小时全市场扫描 → OI/MC ≥ 后端全局 AMBUSH_OI_MC_THRESHOLD        ⇒ 加观察名单
+观察名单 OI 监控 → Z-Score > 后端全局 AMBUSH_Z_SCORE_THRESHOLD     ⇒ 双门 ① 通过
+15m K线        → 涨幅 ≥ 后端全局 AMBUSH_SURGE_15M_THRESHOLD       ⇒ 双门 ② 通过
 
 两门齐 → 先规则判向，再按 direction 过滤:
   规则判向（涨幅/RSI/24h前涨幅）→ signal=short/long/skip
@@ -30,20 +30,22 @@
 {
   "strategy_type": "ambush",
   "direction": "balanced",
-  "trigger":      { ... 共享触发阈值 ... },
+  "trigger":      { ... 本地回测用的后端默认触发阈值；创建 bot 时不提交 ... },
   "long_params":  { ... 做多专用：仓位 + 止损 + 动量确认 + 冷却 ... },
   "short_params": { ... 做空专用：仓位 + 止损 + 入场延迟 + 冷却 ... },
   "rhythm":       { ... 共享节奏：去重、单事件多笔 ... }
 }
 ```
 
-## 触发参数（trigger，共享）
+## 本地回测触发阈值（trigger）
 
-| 字段 | 范围 | 默认 | 含义 |
+`trigger` 只用于本地回测，并固定使用后端 env 默认值；创建 bot 时不会提交给后端。实盘触发阈值由后端统一控制。
+
+| 字段 | 后端 env | skill 本地回测默认 | 含义 |
 |------|------|------|------|
-| `oi_mc_threshold` | 0.20 ~ 0.50 | 0.35 | OI/MC ≥ 此值进观察名单。低=更多币入观察、触发频繁但精度降；高=更严苛 |
-| `z_score_threshold` | 1.5 ~ 3.0 | 2.0 | OI/MC 30 天 Z-Score 超此值算 OI 异动（双门 ①）。冷启动期（日线 OI < 14 天）退化为纯绝对值触发 |
-| `surge_15m_threshold` | 0.05 ~ 0.20 | 0.10 | 15m K 线涨幅 ≥ 此值算价格异动（双门 ②）|
+| `oi_mc_threshold` | `AMBUSH_OI_MC_THRESHOLD` | 0.20 | OI/MC ≥ 此值进观察名单 |
+| `z_score_threshold` | `AMBUSH_Z_SCORE_THRESHOLD` | 2.5 | OI/MC 30 天 Z-Score 超此值算 OI 异动（双门 ①）。冷启动期（日线 OI < 14 天）退化为纯绝对值触发 |
+| `surge_15m_threshold` | `AMBUSH_SURGE_15M_THRESHOLD` | 0.08 | 15m K 线涨幅 ≥ 此值算价格异动（双门 ②）|
 
 ## 方向控制
 
@@ -155,9 +157,9 @@ ambush bot **同时只允许 1 个持仓**（"单持仓锁"）。已持有 A 币
 
 ### 风格映射
 
-| 用户描述关键词 | direction | 触发阈值倾向 |
+| 用户描述关键词 | direction | 仓位倾向 |
 |--------------|-----------|------------|
-| "做空为主" / "抓回调" / "妖币翻车" | `short` | 偏激进（低 surge 阈值，多触发） |
+| "做空为主" / "抓回调" / "妖币翻车" | `short` | 由 aggressiveness 决定 |
 | "动量启动" / "抓上涨" / "追涨" | `long` | 中性 |
 | "双向" / "balanced" / 未明说 | `balanced` | 中性 |
 
@@ -217,7 +219,7 @@ defaults = {
 
 - `direction` 三选一：`long` / `short` / `balanced`
 - **`leverage` ∈ [1, 3]**（Hyperliquid 已经把异动币目标人群全部 cap 在 3x；server `ValidateAmbushBotParams` 直接拒绝超过 3 的参数，`validateSourceLeverage` 在下单时再校验一次。skill 推断阶段也应该硬夹）
-- `oi_mc_threshold` 不能 < 0.20（< 0.20 触发量爆炸 + 数据噪声）—— 但 trigger 已经移到 server config，per-bot 不再可设
+- `oi_mc_threshold` / `z_score_threshold` / `surge_15m_threshold` 已经移到 server config，per-bot 不再可设；skill 本地回测固定使用后端默认值
 - `position_pct × leverage` 实际敞口建议 ≤ 5.0；超过会被回测拒绝并提示"风险过高"。**双通道分别校验**：long_params 和 short_params 各自的 `position_pct × leverage` 都要满足。在 leverage=3 的现实下，position_pct 上限自然落到约 0.50（×3 = 1.5，远小于 5.0），所以这条约束在异动币场景下基本不会触发，主要由 `position_pct` 自身的 0.50 上限管住
 - `max_hold_hours` ≤ 168（更长无意义）
 - 单 bot **同时只允许 1 个持仓**（不可改）

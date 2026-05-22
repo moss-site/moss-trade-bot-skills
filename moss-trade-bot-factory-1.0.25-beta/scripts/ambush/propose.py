@@ -2,8 +2,8 @@
 """
 Ambush bot 参数推断器。
 
-根据用户描述的「方向偏好」+「激进度」，从预设表生成完整双通道参数 JSON
-（trigger + long_params + short_params + rhythm 四块）。
+根据用户描述的「方向偏好」+「激进度」，从预设表生成 Ambush 参数 JSON。
+trigger 只作为本地回测的后端默认阈值假设保留，不会提交给后端。
 
 参数语义详见：
   knowledge/ambush_params_reference.md
@@ -19,24 +19,15 @@ import argparse
 import json
 from pathlib import Path
 
-# ---- 触发阈值预设（按激进度变化）----
-# 阈值范围参考 knowledge/ambush_params_reference.md「触发参数」节
-TRIGGER_PRESETS = {
-    "conservative": {
-        "oi_mc_threshold":     0.40,
-        "z_score_threshold":   2.5,
-        "surge_15m_threshold": 0.12,
-    },
-    "default": {
-        "oi_mc_threshold":     0.35,
-        "z_score_threshold":   2.0,
-        "surge_15m_threshold": 0.10,
-    },
-    "aggressive": {
-        "oi_mc_threshold":     0.30,
-        "z_score_threshold":   1.8,
-        "surge_15m_threshold": 0.08,
-    },
+# ---- 本地回测触发阈值（固定使用后端 env 默认值）----
+# 实盘触发阈值由 server env 统一控制，不是 per-bot 参数：
+#   AMBUSH_OI_MC_THRESHOLD=0.20
+#   AMBUSH_Z_SCORE_THRESHOLD=2.5
+#   AMBUSH_SURGE_15M_THRESHOLD=0.08
+BACKTEST_TRIGGER_DEFAULTS = {
+    "oi_mc_threshold":     0.20,
+    "z_score_threshold":   2.5,
+    "surge_15m_threshold": 0.08,
 }
 
 # ---- Long 仓位预设（仓位随激进度变化；杠杆封顶 3x；其他字段固定默认）----
@@ -94,18 +85,14 @@ RHYTHM_DEFAULTS = {
 
 
 def build_params(direction: str, aggressiveness: str) -> dict:
-    # NOTE: `trigger` is informational only — Phase 2 moved trigger
-    # thresholds to a global server-side config (see
-    # `internal/config/config.go` AmbushOIMCThreshold /
-    # AmbushZScoreThreshold / AmbushSurge15mThreshold). The server
-    # ignores per-bot trigger; `_ambush_params_for_wire` in
-    # trading_client.py strips this block before POSTing. Kept here so
-    # users + QA can see what threshold-band the aggressiveness level
-    # was tuned against (operator should set the server env accordingly).
+    # NOTE: `trigger` is local-backtest only. Phase 2 moved trigger thresholds
+    # to global server-side config (AmbushOIMCThreshold / AmbushZScoreThreshold /
+    # AmbushSurge15mThreshold). `_ambush_params_for_wire` strips this block
+    # before POSTing, so do not present it as generated bot config.
     return {
         "strategy_type": "ambush",
         "direction": direction,
-        "trigger": dict(TRIGGER_PRESETS[aggressiveness]),
+        "trigger": dict(BACKTEST_TRIGGER_DEFAULTS),
         "long_params": {
             **LONG_FIXED,
             **LONG_LEVERAGE_POSITION[aggressiveness],
@@ -128,11 +115,8 @@ def main() -> None:
     p.add_argument(
         "--aggressiveness", default="conservative",
         choices=["conservative", "default", "aggressive"],
-        help="激进度，影响 trigger 阈值 + 仓位预设。默认 conservative — "
-             "回测显示 trigger 阈值越高（触发越稀疏）信号质量越好；conservative "
-             "(oi_mc=0.40 + z=2.5 + surge=0.12) 在 216 历史事件上 Sharpe 0.289 / "
-             "胜率 27% / 收益 +1232%，远胜 default(0.038/9.4%/+250%) 与 aggressive "
-             "(0.042/3.2%/+528%)。",
+        help="激进度，只影响 long/short 仓位预设；本地回测 trigger 固定使用后端默认 "
+             "(oi_mc=0.20, z=2.5, surge=0.08)。默认 conservative。",
     )
     p.add_argument(
         "--output", required=True,
@@ -147,7 +131,7 @@ def main() -> None:
     print(f"[propose] wrote {args.output}")
     print(f"  direction={cfg['direction']}, aggressiveness={args.aggressiveness}")
     t = cfg["trigger"]
-    print(f"  trigger:    oi_mc={t['oi_mc_threshold']:.2f}  "
+    print(f"  backtest trigger defaults: oi_mc={t['oi_mc_threshold']:.2f}  "
           f"z_score={t['z_score_threshold']:.1f}  "
           f"surge={t['surge_15m_threshold']:.2f}")
     lp = cfg["long_params"]

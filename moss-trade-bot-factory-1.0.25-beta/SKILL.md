@@ -213,9 +213,11 @@ python3 {baseDir}/scripts/ambush/propose.py \
 
 产出 `/tmp/ambush_params.json` 含 4 块：
 - `direction`
-- `trigger`（informational only — `trading_client._ambush_params_for_wire` 在 POST /bots 前剥掉；server 用全局阈值 env var）
+- `trigger`（仅本地回测使用，固定取后端 env 默认值：OI/MC=0.20、Z=2.5、15m surge=0.08；`trading_client._ambush_params_for_wire` 在 POST /bots 前剥掉）
 - `long_params` / `short_params`（17 个字段总共，含 leverage/position_pct/stop_loss/trailing/max_hold + momentum_bars/cooldown_bars/entry_delay_bars）
 - `rhythm`（max_trades_per_event=1 + same_coin_dedup_days=7）
+
+对用户展示时，**不要**把 `trigger` 说成"生成的核心参数"。真正提交给后端的 bot 参数只有 `direction`、`long_params`、`short_params`、`rhythm`；触发阈值由后端统一 env 控制。
 
 参数含义需要查时读：`cat {baseDir}/knowledge/ambush_params_reference.md`
 

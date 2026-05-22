@@ -71,6 +71,11 @@ python3 {baseDir}/scripts/ambush/backtest.py \
 >
 > ⚠️ `trigger` 不是生成的 bot 参数。实盘触发阈值由后端统一 env 控制：`AMBUSH_OI_MC_THRESHOLD=0.20`、`AMBUSH_Z_SCORE_THRESHOLD=2.5`、`AMBUSH_SURGE_15M_THRESHOLD=0.08`（除非部署环境显式覆盖）。
 
+成本口径与后端 Ambush backtest 对齐：
+- 平仓路径使用后端/live 4 优先级 cascade：ATR 止损 → max_hold → K 线收盘 trailing → signal_reverse。
+- PnL 先按共享固定深度簿修正 entry/exit 成交价，再扣 taker fee，并按整点 funding 结算。
+- 深度簿所有 Ambush 代币共用一条 USD 深度曲线；这是回测成本模型，不是用户可调参数。
+
 ## 输出格式
 
 `/tmp/ambush_backtest_result.json`：
@@ -83,11 +88,15 @@ python3 {baseDir}/scripts/ambush/backtest.py \
     "triggered_pct": 0.40,
     "win_count": 46,
     "win_rate": 0.529,
-    "total_return_pct": 312.4,
-    "avg_pnl_pct": 3.59,
-    "max_drawdown_pct": -38.2,
-    "sharpe": 0.45
-  },
+	    "total_return_pct": 312.4,
+	    "avg_pnl_pct": 3.59,
+	    "gross_return_pct": 320.1,
+	    "depth_cost_pct": -0.1,
+	    "trading_fee_pct": -5.2,
+	    "funding_fee_pct": -2.4,
+	    "max_drawdown_pct": -38.2,
+	    "sharpe": 0.45
+	  },
   "per_direction": {
     "short": {"count": 62, "win_rate": 0.55, "total_return_pct": 245.0},
     "long":  {"count": 25, "win_rate": 0.48, "total_return_pct":  67.4},
@@ -110,6 +119,7 @@ python3 {baseDir}/scripts/ambush/backtest.py \
 触发次数:   87 / 216 (40%)
 胜率:      52.9%
 总收益:    +312%
+成本:      depth -0.1% / fee -5.2% / funding -2.4%
 最大回撤:  -38%
 Sharpe:    0.45
 ```

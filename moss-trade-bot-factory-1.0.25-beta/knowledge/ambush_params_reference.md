@@ -91,6 +91,10 @@ LONG 信号（任一满足）:
 > close_monitor 切换到 4 优先级 cascade（ATR 止损 / max_hold / K 线收盘 trailing / signal_reverse）。
 > 默认 off — 不带旗标时 `sl_atr_mult` 字段不被读取，仅占位。当前 sl_atr_mult 默认值 2.0 / 2.5
 > 是工程师初值，未经回测校准（follow-up: 扩展 calibrate_thresholds.py）。
+>
+> **Backtest cost model (2026-05-22)**：本地 Ambush 回测与后端 hosted Ambush backtest 使用同一成本口径：
+> 共享固定深度曲线修正 entry/exit 成交价，taker fee 固定 4.5bps，funding 固定 +0.00125% 并按整点结算。
+> 这些是回测/hosted 成本假设，不属于用户提交给后端的 bot 参数。
 
 | 字段 | 范围 | 默认 | 含义 |
 |------|------|------|------|

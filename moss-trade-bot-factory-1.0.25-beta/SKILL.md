@@ -230,8 +230,8 @@ python3 {baseDir}/scripts/ambush/backtest.py \
   --dump-trades 3
 ```
 
-5s 内跑完 216 个历史异动事件回测，模拟仓位演化（按 leverage/stop_loss/trailing/max_hold）。**输出两块**：
-1. **总结表**：触发数 / 胜率 / 总收益 / 最大回撤 / Sharpe + 方向分布（long/short/skip）
+5s 内跑完 216 个历史异动事件回测，模拟仓位演化（与后端 Ambush close cascade 对齐：ATR 止损 / max_hold / K 线 trailing / signal_reverse，并计入共享深度、taker fee、整点 funding）。**输出两块**：
+1. **总结表**：触发数 / 胜率 / 净收益 / depth+fee+funding 成本 / 最大回撤 / Sharpe + 方向分布（long/short/skip）
 2. **最差 3 笔 + 最好 3 笔**（`--dump-trades 3` 自动打印）：让用户感性看清楚 "什么 case bot 会亏 / 什么 case 能抓到"
 
 回测方向必须和实盘方向语义一致：所有方向都会先按规则读事件信号；`short` / `long` 只放行同方向信号，反方向信号记为 `direction_mismatch` 并 skip；`balanced` 放行 long 和 short。

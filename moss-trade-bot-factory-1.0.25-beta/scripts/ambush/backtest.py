@@ -26,13 +26,29 @@ import json
 import math
 import sys
 from dataclasses import dataclass, asdict
+from decimal import Decimal, getcontext
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 
+getcontext().prec = 28
+
 # ===== 路径 =====
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data_cache" / "ambush"
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from ambush import features, indicators  # noqa: E402
+
+
+def _D(v) -> Decimal:
+    if isinstance(v, Decimal):
+        return v
+    if isinstance(v, float):
+        return Decimal(str(v))
+    return Decimal(v)
 
 
 # ===== 决策规则（与 internal/ambush/strategy/rule_decision.go 对齐）=====
@@ -85,7 +101,273 @@ def decide_for_event(event: dict, params: dict) -> tuple[str, str]:
     return ("skip", "invalid_direction")
 
 
+def decide_for_features(
+    surge_15m: float, rsi_14: float, chg_before_24h: float, direction: str
+) -> tuple[str, str]:
+    """Rule decision with only the configured direction filter, no trigger gate."""
+    signal, reason = balanced_decide(surge_15m, rsi_14, chg_before_24h)
+    if direction == "balanced" or signal == "skip" or signal == direction:
+        return (signal, reason)
+    if direction in ("short", "long"):
+        return ("skip", "direction_mismatch")
+    return ("skip", "invalid_direction")
+
+
 # ===== 仓位演化 =====
+
+AMBUSH_BACKTEST_INITIAL_CAPITAL = _D("1000")
+AMBUSH_BACKTEST_TAKER_FEE_RATE = _D("0.00045")
+AMBUSH_BACKTEST_FUNDING_RATE = _D("0.0000125")
+AMBUSH_SHARED_DEPTH_MID_PRICE = _D("80876.5")
+
+AMBUSH_SHARED_BID_DEPTH = [
+    ("80876.0", "12.19958"),
+    ("80875.0", "0.63913"),
+    ("80874.0", "1.49278"),
+    ("80872.0", "1.8746"),
+    ("80871.0", "2.22314"),
+    ("80870.0", "0.23029"),
+    ("80869.0", "1.39707"),
+    ("80868.0", "8.50507"),
+    ("80867.0", "1.69148"),
+    ("80866.0", "0.12391"),
+    ("80865.0", "0.35311"),
+    ("80864.0", "5.81773"),
+    ("80863.0", "4.03869"),
+    ("80862.0", "3.18947"),
+    ("80861.0", "3.54351"),
+    ("80860.0", "5.79071"),
+    ("80859.0", "4.4586"),
+    ("80858.0", "2.22688"),
+    ("80857.0", "4.35442"),
+    ("80856.0", "14.17119"),
+]
+
+AMBUSH_SHARED_ASK_DEPTH = [
+    ("80877.0", "5.49057"),
+    ("80878.0", "3.00013"),
+    ("80879.0", "0.61845"),
+    ("80880.0", "0.37237"),
+    ("80881.0", "0.01794"),
+    ("80882.0", "1.27627"),
+    ("80883.0", "0.0518"),
+    ("80884.0", "0.32118"),
+    ("80885.0", "0.49772"),
+    ("80886.0", "0.21498"),
+    ("80887.0", "2.11463"),
+    ("80888.0", "2.73305"),
+    ("80889.0", "0.395"),
+    ("80890.0", "0.06"),
+    ("80891.0", "2.23133"),
+    ("80892.0", "6.02488"),
+    ("80893.0", "3.0444"),
+    ("80894.0", "7.79161"),
+    ("80895.0", "0.52808"),
+    ("80896.0", "2.4172"),
+]
+
+
+def _anchored_depth_price(snapshot_price: str, mark_price: Decimal) -> Decimal:
+    return mark_price * _D(snapshot_price) / AMBUSH_SHARED_DEPTH_MID_PRICE
+
+
+def _anchored_depth_qty(snapshot_qty: str, mark_price: Decimal) -> Decimal:
+    if mark_price <= 0:
+        return _D(0)
+    return _D(snapshot_qty) * AMBUSH_SHARED_DEPTH_MID_PRICE / mark_price
+
+
+def _simulate_shared_depth_fill_by_notional(
+    direction: int, target_notional: Decimal, mark_price: Decimal
+) -> tuple[Decimal, Decimal, Decimal]:
+    if target_notional <= 0 or mark_price <= 0:
+        return _D(0), _D(0), _D(0)
+    levels = AMBUSH_SHARED_ASK_DEPTH if direction > 0 else AMBUSH_SHARED_BID_DEPTH
+    remaining = target_notional
+    fill_qty = _D(0)
+    fill_notional = _D(0)
+    for snapshot_price, snapshot_qty in levels:
+        if remaining <= 0:
+            break
+        price = _anchored_depth_price(snapshot_price, mark_price)
+        qty = _anchored_depth_qty(snapshot_qty, mark_price)
+        level_notional = price * qty
+        take_notional = min(remaining, level_notional)
+        if price <= 0 or take_notional <= 0:
+            continue
+        fill_qty += take_notional / price
+        fill_notional += take_notional
+        remaining -= take_notional
+    if fill_qty <= 0:
+        return _D(0), _D(0), _D(0)
+    return fill_notional / fill_qty, fill_qty, fill_notional
+
+
+def _simulate_shared_depth_fill_by_qty(
+    direction: int, requested_qty: Decimal, mark_price: Decimal
+) -> tuple[Decimal, Decimal, Decimal]:
+    if requested_qty <= 0 or mark_price <= 0:
+        return _D(0), _D(0), _D(0)
+    levels = AMBUSH_SHARED_ASK_DEPTH if direction > 0 else AMBUSH_SHARED_BID_DEPTH
+    remaining = requested_qty
+    fill_qty = _D(0)
+    fill_notional = _D(0)
+    for snapshot_price, snapshot_qty in levels:
+        if remaining <= 0:
+            break
+        price = _anchored_depth_price(snapshot_price, mark_price)
+        qty = _anchored_depth_qty(snapshot_qty, mark_price)
+        take_qty = min(remaining, qty)
+        if price <= 0 or take_qty <= 0:
+            continue
+        fill_qty += take_qty
+        fill_notional += take_qty * price
+        remaining -= take_qty
+    if fill_qty <= 0:
+        return _D(0), _D(0), _D(0)
+    return fill_notional / fill_qty, fill_qty, fill_notional
+
+
+def _estimate_entry_execution(
+    side: str, raw_entry: float, position_pct: float, leverage: int
+) -> dict[str, Decimal]:
+    mark = _D(raw_entry)
+    margin = _D(position_pct) * AMBUSH_BACKTEST_INITIAL_CAPITAL
+    lev = _D(leverage)
+    if mark <= 0 or margin <= 0 or lev <= 0:
+        return {"price": _D(0), "qty": _D(0), "notional": _D(0), "margin": margin, "filled_ratio": _D(0)}
+    target_notional = margin * lev
+    direction = -1 if side == "short" else 1
+    price, qty, notional = _simulate_shared_depth_fill_by_notional(direction, target_notional, mark)
+    if price <= 0 or qty <= 0:
+        price = mark
+        qty = target_notional / mark
+        notional = target_notional
+    filled_ratio = notional / target_notional if target_notional > 0 else _D(0)
+    return {
+        "price": price,
+        "qty": qty,
+        "notional": notional,
+        "margin": margin,
+        "filled_ratio": filled_ratio,
+    }
+
+
+def _next_funding_settlement(ts: pd.Timestamp) -> pd.Timestamp:
+    cursor = pd.Timestamp(ts).floor("h")
+    if cursor <= ts:
+        cursor += pd.Timedelta(hours=1)
+    return cursor
+
+
+def _funding_mark_at(bars: list[dict], settlement: pd.Timestamp, fallback: Decimal) -> Decimal:
+    mark = fallback
+    for bar in bars:
+        bar_ts = pd.Timestamp(bar["ts"])
+        if bar_ts > settlement:
+            break
+        close = float(bar["close"])
+        if close > 0:
+            mark = _D(close)
+    return mark
+
+
+def _estimate_funding_fee(
+    side: str,
+    qty: Decimal,
+    entry_time: pd.Timestamp,
+    exit_time: pd.Timestamp,
+    bars: list[dict],
+    fallback_mark: Decimal,
+) -> Decimal:
+    if qty <= 0 or exit_time <= entry_time:
+        return _D(0)
+    signed_qty = -qty if side == "short" else qty
+    total = _D(0)
+    settlement = _next_funding_settlement(entry_time)
+    while settlement <= exit_time:
+        mark = _funding_mark_at(bars, settlement, fallback_mark)
+        if mark > 0:
+            total += -signed_qty * mark * AMBUSH_BACKTEST_FUNDING_RATE
+        settlement += pd.Timedelta(hours=1)
+    return total
+
+
+def _apply_trade_costs(
+    side: str,
+    raw_entry: float,
+    raw_exit: float,
+    entry_time: pd.Timestamp,
+    exit_time: pd.Timestamp,
+    position_pct: float,
+    leverage: int,
+    bars: list[dict],
+) -> dict[str, float]:
+    raw_entry_d = _D(raw_entry)
+    raw_exit_d = _D(raw_exit)
+    entry_exec = _estimate_entry_execution(side, raw_entry, position_pct, leverage)
+    if raw_entry_d <= 0 or raw_exit_d <= 0 or entry_exec["margin"] <= 0 or entry_exec["qty"] <= 0:
+        raw = _signed_return(side, raw_entry, raw_exit) * leverage
+        return {
+            "entry_price": raw_entry,
+            "exit_price": raw_exit,
+            "raw_pnl_pct": raw,
+            "gross_pnl_pct": raw,
+            "pnl_pct": raw,
+            "depth_cost_pct": 0.0,
+            "trading_fee_pct": 0.0,
+            "funding_fee_pct": 0.0,
+            "entry_fee_pct": 0.0,
+            "exit_fee_pct": 0.0,
+            "depth_filled_ratio": 1.0,
+        }
+
+    close_direction = 1 if side == "short" else -1
+    exit_price, exit_qty, exit_notional = _simulate_shared_depth_fill_by_qty(
+        close_direction, entry_exec["qty"], raw_exit_d
+    )
+    if exit_price <= 0 or exit_qty <= 0:
+        exit_price = raw_exit_d
+        exit_qty = entry_exec["qty"]
+        exit_notional = entry_exec["qty"] * raw_exit_d
+
+    raw_pnl = _D(_signed_return(side, raw_entry, raw_exit) * leverage)
+    if side == "short":
+        gross_abs = (entry_exec["price"] - exit_price) * exit_qty
+    else:
+        gross_abs = (exit_price - entry_exec["price"]) * exit_qty
+    gross_pnl = gross_abs / entry_exec["margin"]
+
+    entry_fee = -(entry_exec["notional"] * AMBUSH_BACKTEST_TAKER_FEE_RATE)
+    exit_fee = -(exit_notional * AMBUSH_BACKTEST_TAKER_FEE_RATE)
+    trading_fee = entry_fee + exit_fee
+    funding_fee = _estimate_funding_fee(
+        side, entry_exec["qty"], entry_time, exit_time, bars, raw_entry_d
+    )
+    funding_pct = funding_fee / entry_exec["margin"]
+    entry_fee_pct = entry_fee / entry_exec["margin"]
+    exit_fee_pct = exit_fee / entry_exec["margin"]
+    trading_fee_pct = trading_fee / entry_exec["margin"]
+    net_pnl = gross_pnl + trading_fee_pct + funding_pct
+
+    filled_ratio = min(entry_exec["filled_ratio"], _D(1))
+    if entry_exec["qty"] > 0:
+        filled_ratio = min(filled_ratio, exit_qty / entry_exec["qty"])
+
+    return {
+        "entry_price": float(entry_exec["price"]),
+        "exit_price": float(exit_price),
+        "raw_pnl_pct": float(raw_pnl),
+        "gross_pnl_pct": float(gross_pnl),
+        "pnl_pct": float(net_pnl),
+        "depth_cost_pct": float(gross_pnl - raw_pnl),
+        "trading_fee_pct": float(trading_fee_pct),
+        "funding_fee_pct": float(funding_pct),
+        "entry_fee_pct": float(entry_fee_pct),
+        "exit_fee_pct": float(exit_fee_pct),
+        "depth_filled_ratio": float(filled_ratio),
+    }
+
 
 @dataclass
 class TradeOutcome:
@@ -93,73 +375,187 @@ class TradeOutcome:
     entry: float
     exit_price: float
     pnl_pct: float           # 杠杆后净 PnL（小数：0.50 = +50%）
-    exit_reason: str         # 'stop_loss' / 'trailing' / 'max_hold'
+    exit_reason: str         # 'atr_stop_loss' / 'trailing' / 'signal_reverse' / 'max_hold'
     bars_held: int
+    entry_mark: float = 0.0
+    exit_mark: float = 0.0
+    raw_pnl_pct: float = 0.0
+    gross_pnl_pct: float = 0.0
+    depth_cost_pct: float = 0.0
+    trading_fee_pct: float = 0.0
+    funding_fee_pct: float = 0.0
+    entry_fee_pct: float = 0.0
+    exit_fee_pct: float = 0.0
+    depth_filled_ratio: float = 1.0
+    entry_time: str = ""
+    exit_time: str = ""
+
+
+def _sl_atr_mult_or_default(v, side: str) -> float:
+    val = float(v or 0)
+    if val > 0:
+        return val
+    return 2.5 if side == "short" else 2.0
+
+
+def _signed_return(side: str, entry: float, exit_price: float) -> float:
+    if entry <= 0:
+        return 0.0
+    if side == "short":
+        return (entry - exit_price) / entry
+    return (exit_price - entry) / entry
 
 
 def simulate_position(
     klines_after: list[dict],
-    entry: float,
+    raw_entry: float,
+    entry_time: pd.Timestamp,
     side: str,
     leverage: int,
-    stop_loss_pct: float,
+    position_pct: float,
     trailing_pct: float,
+    max_hold_hours: int,
     max_hold_bars: int,
+    sl_atr_mult: float,
+    direction: str,
 ) -> TradeOutcome:
     """
-    用触发后 K 线序列模拟一次仓位演化。
+    用 backend/live executor 同口径 close cascade 模拟一次仓位演化。
 
     平仓优先级（每根 K 线内）:
-      1. 硬止损（保证金亏损 ≥ stop_loss_pct）
-      2. 移动止盈（从 peak 回撤 ≥ trailing_pct）
-      3. 超时（max_hold_bars 内未平 → close at last close）
+      1. ATR stop_loss（按 K 线 close 判断）
+      2. max_hold
+      3. K-line-close trailing
+      4. signal_reverse
 
     pnl_pct 是杠杆后的 net % return。
     """
-    bars = klines_after[:max_hold_bars]
+    bars = klines_after
     if not bars:
-        return TradeOutcome(side, entry, entry, 0.0, "no_klines", 0)
+        return TradeOutcome(side, raw_entry, raw_entry, 0.0, "no_klines", 0)
 
-    if side == "long":
-        peak = entry
-        for i, k in enumerate(bars):
-            high, low = k["high"], k["low"]
-            peak = max(peak, high)
-            # stop_loss: low ≤ entry × (1 - stop_loss / leverage)
-            stop_price = entry * (1 - stop_loss_pct / leverage)
-            if low <= stop_price:
-                pnl = (stop_price - entry) / entry * leverage
-                return TradeOutcome(side, entry, stop_price, pnl, "stop_loss", i + 1)
-            # trailing: 从 peak 回撤
-            if peak > entry:
-                drawdown = (peak - low) / peak
-                if drawdown >= trailing_pct:
-                    exit_price = peak * (1 - trailing_pct)
-                    pnl = (exit_price - entry) / entry * leverage
-                    return TradeOutcome(side, entry, exit_price, pnl, "trailing", i + 1)
-        # max_hold
-        last_close = bars[-1]["close"]
-        pnl = (last_close - entry) / entry * leverage
-        return TradeOutcome(side, entry, last_close, pnl, "max_hold", len(bars))
+    entry_exec = _estimate_entry_execution(side, raw_entry, position_pct, leverage)
+    entry = float(entry_exec["price"]) if entry_exec["price"] > 0 else raw_entry
 
-    else:  # short
-        trough = entry
-        for i, k in enumerate(bars):
-            high, low = k["high"], k["low"]
-            trough = min(trough, low)
-            stop_price = entry * (1 + stop_loss_pct / leverage)
-            if high >= stop_price:
-                pnl = (entry - stop_price) / entry * leverage
-                return TradeOutcome(side, entry, stop_price, pnl, "stop_loss", i + 1)
-            if trough < entry:
-                drawup = (high - trough) / trough
-                if drawup >= trailing_pct:
-                    exit_price = trough * (1 + trailing_pct)
-                    pnl = (entry - exit_price) / entry * leverage
-                    return TradeOutcome(side, entry, exit_price, pnl, "trailing", i + 1)
-        last_close = bars[-1]["close"]
-        pnl = (entry - last_close) / entry * leverage
-        return TradeOutcome(side, entry, last_close, pnl, "max_hold", len(bars))
+    peak = 0.0
+    have_peak = False
+    limit = len(bars)
+    if max_hold_bars > 0 and limit > max_hold_bars + 1:
+        limit = max_hold_bars + 1
+
+    for i in range(limit):
+        lo = i - 95
+        if lo < 0:
+            lo = 0
+        window = bars[lo : i + 1]
+        if len(window) < 15:
+            continue
+        last_close = float(bars[i]["close"])
+        opened_ago_h = i * 0.25
+
+        # 1. ATR stop_loss
+        try:
+            atr = indicators.compute_atr(window, period=14)
+        except ValueError:
+            atr = 0.0
+        if atr > 0 and entry > 0:
+            sl_dist = sl_atr_mult * atr / entry
+            raw_pnl = _signed_return(side, entry, last_close)
+            if raw_pnl <= -sl_dist:
+                cost = _apply_trade_costs(
+                    side, raw_entry, last_close, entry_time, pd.Timestamp(bars[i]["ts"]),
+                    position_pct, leverage, bars[: i + 1],
+                )
+                return TradeOutcome(
+                    side, cost["entry_price"], cost["exit_price"], cost["pnl_pct"],
+                    "atr_stop_loss", i + 1, raw_entry, last_close,
+                    cost["raw_pnl_pct"], cost["gross_pnl_pct"], cost["depth_cost_pct"],
+                    cost["trading_fee_pct"], cost["funding_fee_pct"],
+                    cost["entry_fee_pct"], cost["exit_fee_pct"], cost["depth_filled_ratio"],
+                    str(pd.Timestamp(entry_time)), str(pd.Timestamp(bars[i]["ts"])),
+                )
+
+        # 2. max_hold
+        if max_hold_hours > 0 and opened_ago_h >= max_hold_hours:
+            cost = _apply_trade_costs(
+                side, raw_entry, last_close, entry_time, pd.Timestamp(bars[i]["ts"]),
+                position_pct, leverage, bars[: i + 1],
+            )
+            return TradeOutcome(
+                side, cost["entry_price"], cost["exit_price"], cost["pnl_pct"],
+                "max_hold", i + 1, raw_entry, last_close,
+                cost["raw_pnl_pct"], cost["gross_pnl_pct"], cost["depth_cost_pct"],
+                cost["trading_fee_pct"], cost["funding_fee_pct"],
+                cost["entry_fee_pct"], cost["exit_fee_pct"], cost["depth_filled_ratio"],
+                str(pd.Timestamp(entry_time)), str(pd.Timestamp(bars[i]["ts"])),
+            )
+
+        # 3. K-line-close trailing
+        if not have_peak:
+            peak = last_close
+            have_peak = True
+            continue
+        new_peak = peak
+        if side == "long":
+            if last_close > peak or not (peak > 0):
+                new_peak = last_close
+            drift = (new_peak - last_close) / new_peak if new_peak > 0 else 0.0
+        else:
+            if (last_close < peak and peak > 0) or not (peak > 0):
+                new_peak = last_close
+            drift = (last_close - new_peak) / new_peak if new_peak > 0 else 0.0
+        peak = new_peak
+        if trailing_pct > 0 and drift >= trailing_pct:
+            cost = _apply_trade_costs(
+                side, raw_entry, last_close, entry_time, pd.Timestamp(bars[i]["ts"]),
+                position_pct, leverage, bars[: i + 1],
+            )
+            return TradeOutcome(
+                side, cost["entry_price"], cost["exit_price"], cost["pnl_pct"],
+                "trailing", i + 1, raw_entry, last_close,
+                cost["raw_pnl_pct"], cost["gross_pnl_pct"], cost["depth_cost_pct"],
+                cost["trading_fee_pct"], cost["funding_fee_pct"],
+                cost["entry_fee_pct"], cost["exit_fee_pct"], cost["depth_filled_ratio"],
+                str(pd.Timestamp(entry_time)), str(pd.Timestamp(bars[i]["ts"])),
+            )
+
+        # 4. signal_reverse
+        try:
+            fresh = features.compute_features(window)
+            reverse, _ = decide_for_features(
+                fresh["surge_15m"], fresh["rsi_14"], fresh["chg_24h_pct"], direction
+            )
+        except ValueError:
+            reverse = "skip"
+        if (side == "long" and reverse == "short") or (
+            side == "short" and reverse == "long"
+        ):
+            cost = _apply_trade_costs(
+                side, raw_entry, last_close, entry_time, pd.Timestamp(bars[i]["ts"]),
+                position_pct, leverage, bars[: i + 1],
+            )
+            return TradeOutcome(
+                side, cost["entry_price"], cost["exit_price"], cost["pnl_pct"],
+                "signal_reverse", i + 1, raw_entry, last_close,
+                cost["raw_pnl_pct"], cost["gross_pnl_pct"], cost["depth_cost_pct"],
+                cost["trading_fee_pct"], cost["funding_fee_pct"],
+                cost["entry_fee_pct"], cost["exit_fee_pct"], cost["depth_filled_ratio"],
+                str(pd.Timestamp(entry_time)), str(pd.Timestamp(bars[i]["ts"])),
+            )
+
+    last_close = float(bars[-1]["close"])
+    cost = _apply_trade_costs(
+        side, raw_entry, last_close, entry_time, pd.Timestamp(bars[-1]["ts"]),
+        position_pct, leverage, bars,
+    )
+    return TradeOutcome(
+        side, cost["entry_price"], cost["exit_price"], cost["pnl_pct"],
+        "max_hold", len(bars), raw_entry, last_close,
+        cost["raw_pnl_pct"], cost["gross_pnl_pct"], cost["depth_cost_pct"],
+        cost["trading_fee_pct"], cost["funding_fee_pct"],
+        cost["entry_fee_pct"], cost["exit_fee_pct"], cost["depth_filled_ratio"],
+        str(pd.Timestamp(entry_time)), str(pd.Timestamp(bars[-1]["ts"])),
+    )
 
 
 # ===== 加载数据 =====
@@ -189,7 +585,7 @@ def load_klines_for_base(data_dir: Path, base: str) -> Optional[pd.DataFrame]:
 
 def klines_after_trigger(klines: pd.DataFrame, trigger_ts: pd.Timestamp, max_bars: int) -> list[dict]:
     after = klines[klines["ts"] > trigger_ts].head(max_bars)
-    return after[["open", "high", "low", "close"]].to_dict("records")
+    return after[["ts", "open", "high", "low", "close"]].to_dict("records")
 
 
 # ===== 主回测循环 =====
@@ -203,6 +599,10 @@ def run_backtest(
 
     # 单事件仓位演化最长 max_hold_bars = max(long.max_hold, short.max_hold) × 4 (15m bars/h)
     max_hold_bars = max(long_p["max_hold_hours"], short_p["max_hold_hours"]) * 4
+
+    events_df = events_df.copy()
+    events_df["_trigger_ts_sort"] = pd.to_datetime(events_df["trigger_ts"], utc=True)
+    events_df = events_df.sort_values(["_trigger_ts_sort", "base"], kind="mergesort")
 
     decisions = []
     trades = []
@@ -250,14 +650,20 @@ def run_backtest(
         # at bars_after[delay].open instead of bars_after[0] price.
         if decision == "long":
             delay_bars = int(long_p.get("momentum_bars", 0) or 0)
-            sl, tr, mh_bars = long_p["stop_loss_pct"], long_p["trailing_pct"], long_p["max_hold_hours"] * 4
+            tr = float(long_p["trailing_pct"])
+            max_hold_hours = int(long_p["max_hold_hours"])
+            sl_atr_mult = _sl_atr_mult_or_default(long_p.get("sl_atr_mult", 0), "long")
             lev = int(long_p["leverage"])
+            position_pct = float(long_p["position_pct"])
         else:
             delay_bars = int(short_p.get("entry_delay_bars", 0) or 0)
-            sl, tr, mh_bars = short_p["stop_loss_pct"], short_p["trailing_pct"], short_p["max_hold_hours"] * 4
+            tr = float(short_p["trailing_pct"])
+            max_hold_hours = int(short_p["max_hold_hours"])
+            sl_atr_mult = _sl_atr_mult_or_default(short_p.get("sl_atr_mult", 0), "short")
             lev = int(short_p["leverage"])
+            position_pct = float(short_p["position_pct"])
 
-        bars_after = klines_after_trigger(klines, ev["trigger_ts"], mh_bars + delay_bars)
+        bars_after = klines_after_trigger(klines, ev["trigger_ts"], max_hold_bars + delay_bars + 1)
         if not bars_after:
             skip_reasons["no_klines_after_trigger"] = skip_reasons.get("no_klines_after_trigger", 0) + 1
             continue
@@ -270,11 +676,20 @@ def run_backtest(
         # after delay completes).
         delayed_bars = bars_after[delay_bars:]
         entry_price = delayed_bars[0]["open"] if delay_bars > 0 else ev["trigger_price"]
-        outcome = simulate_position(delayed_bars, entry_price, decision, lev, sl, tr, mh_bars)
-        if decision == "long":
-            position_pct = float(long_p["position_pct"])
-        else:
-            position_pct = float(short_p["position_pct"])
+        entry_time = pd.Timestamp(delayed_bars[0]["ts"]) if delay_bars > 0 else ev["trigger_ts"]
+        outcome = simulate_position(
+            delayed_bars,
+            entry_price,
+            entry_time,
+            decision,
+            lev,
+            position_pct,
+            tr,
+            max_hold_hours,
+            max_hold_bars,
+            sl_atr_mult,
+            direction,
+        )
         leverage = lev
         trades.append({
             "base": ev["base"],
@@ -306,6 +721,14 @@ def _aggregate(decisions: list, trades: list, skip_reasons: dict) -> dict:
                 "win_count": 0, "win_rate": 0.0,
                 "total_return_pct": 0.0,
                 "avg_pnl_pct": 0.0,
+                "gross_return_pct": 0.0,
+                "depth_cost_pct": 0.0,
+                "trading_fee_pct": 0.0,
+                "funding_fee_pct": 0.0,
+                "entry_fee_pct": 0.0,
+                "exit_fee_pct": 0.0,
+                "avg_gross_pnl_pct": 0.0,
+                "avg_cost_pnl_pct": 0.0,
                 "max_drawdown_pct": 0.0,
                 "sharpe": 0.0,
             },
@@ -321,11 +744,24 @@ def _aggregate(decisions: list, trades: list, skip_reasons: dict) -> dict:
     #
     # 之前公式 `equity *= 1 + pnl_pct` 假设每笔押 100% equity 当保证金 — 严重高估
     # 回撤 + 高估收益。修复后回撤反映真实资金动态。
-    pnl_list = [t["pnl_pct"] for t in trades]  # 保证金相对收益（不含 position_pct）
     net_pnl_list = [t["pnl_pct"] * t.get("position_pct", 1.0) for t in trades]
+    gross_pnl_list = [t.get("gross_pnl_pct", 0.0) * t.get("position_pct", 1.0) for t in trades]
+    depth_cost_list = [t.get("depth_cost_pct", 0.0) * t.get("position_pct", 1.0) for t in trades]
+    trading_fee_list = [t.get("trading_fee_pct", 0.0) * t.get("position_pct", 1.0) for t in trades]
+    funding_fee_list = [t.get("funding_fee_pct", 0.0) * t.get("position_pct", 1.0) for t in trades]
+    entry_fee_list = [t.get("entry_fee_pct", 0.0) * t.get("position_pct", 1.0) for t in trades]
+    exit_fee_list = [t.get("exit_fee_pct", 0.0) * t.get("position_pct", 1.0) for t in trades]
     wins = [p for p in net_pnl_list if p > 0]
     total_ret = sum(net_pnl_list) * 100
+    gross_ret = sum(gross_pnl_list) * 100
+    depth_cost = sum(depth_cost_list) * 100
+    trading_fee = sum(trading_fee_list) * 100
+    funding_fee = sum(funding_fee_list) * 100
+    entry_fee = sum(entry_fee_list) * 100
+    exit_fee = sum(exit_fee_list) * 100
     avg_pnl = total_ret / len(net_pnl_list)
+    avg_gross_pnl = gross_ret / len(net_pnl_list)
+    avg_cost_pnl = (depth_cost + trading_fee + funding_fee) / len(net_pnl_list)
     win_rate = len(wins) / len(net_pnl_list)
     sd = pd.Series(net_pnl_list).std(ddof=1) if len(net_pnl_list) > 1 else 0
     sharpe = (sum(net_pnl_list) / len(net_pnl_list)) / sd if sd > 0 else 0.0
@@ -348,6 +784,14 @@ def _aggregate(decisions: list, trades: list, skip_reasons: dict) -> dict:
         "win_rate":         round(win_rate, 4),
         "total_return_pct": round(total_ret, 2),
         "avg_pnl_pct":      round(avg_pnl, 2),
+        "gross_return_pct": round(gross_ret, 2),
+        "depth_cost_pct":   round(depth_cost, 2),
+        "trading_fee_pct":  round(trading_fee, 2),
+        "funding_fee_pct":  round(funding_fee, 2),
+        "entry_fee_pct":    round(entry_fee, 2),
+        "exit_fee_pct":     round(exit_fee, 2),
+        "avg_gross_pnl_pct": round(avg_gross_pnl, 2),
+        "avg_cost_pnl_pct": round(avg_cost_pnl, 2),
         "max_drawdown_pct": round(max_dd * 100, 2),
         "sharpe":           round(sharpe, 4),
     }
@@ -360,7 +804,7 @@ def _aggregate(decisions: list, trades: list, skip_reasons: dict) -> dict:
     for side, ts in by_side.items():
         if not ts:
             continue
-        ps = [t["pnl_pct"] for t in ts]
+        ps = [t["pnl_pct"] * t.get("position_pct", 1.0) for t in ts]
         ws = [p for p in ps if p > 0]
         per_direction[side] = {
             "count": len(ts),
@@ -409,6 +853,9 @@ def main() -> None:
     print(f"触发: {s['triggered_count']}/{s['total_events']} ({s['triggered_pct']*100:.0f}%)")
     print(f"胜率: {s['win_rate']*100:.1f}%  总收益: {s['total_return_pct']:+.1f}%  "
           f"avg/笔: {s['avg_pnl_pct']:+.2f}%")
+    print(f"成本: depth {s.get('depth_cost_pct', 0):+.2f}%  "
+          f"fee {s.get('trading_fee_pct', 0):+.2f}%  "
+          f"funding {s.get('funding_fee_pct', 0):+.2f}%")
     print(f"最大回撤: {s['max_drawdown_pct']:.1f}%  Sharpe: {s['sharpe']:.3f}")
 
     if args.dump_trades > 0 and result.get("trades"):

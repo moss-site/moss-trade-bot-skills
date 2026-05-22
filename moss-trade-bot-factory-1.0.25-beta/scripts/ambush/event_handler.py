@@ -15,7 +15,7 @@ Decision logic lives in `decision.py` (1:1 port of Go
     → upsert events row
     → decide() → side (long/short/skip) + reason
     → on long/short: client.open_long() / .open_short() with notional
-                     derived from current wallet_balance × position_pct
+                     derived from wallet_balance × position_pct × leverage
     → record_decision(decision, reason, order_id?, order_status, error?)
     → advance last_event_id_seen cursor
 
@@ -164,12 +164,15 @@ class EventHandler:
     # ── notional computation ────────────────────────────────────────────
 
     def _compute_notional(self, side: str) -> Decimal:
-        """notional = wallet_balance × position_pct.
+        """notional = wallet_balance × position_pct × leverage.
 
-        Leverage controls only required margin (margin = notional/lev),
-        which the server applies. We send the unleveraged face value as
-        `notional` and the side's `leverage` separately. Floors at
-        `max_notional_floor` to avoid below-minimum orders on tiny
+        position_pct is the MARGIN fraction (parity with the server
+        executor internal/ambush/executor.ambushOpenTargetNotionalUSDC and
+        the backtest cost model internal/ambush/backtest/costs.go): the
+        margin deployed is wallet × pct, and the target order notional is
+        that margin × leverage. Sending only wallet × pct (the old
+        unleveraged face value) under-sized every position by `leverage`.
+        Floors at `max_notional_floor` to avoid below-minimum orders on tiny
         accounts.
         """
         try:
@@ -199,7 +202,8 @@ class EventHandler:
         if pct <= 0:
             return Decimal("0")
 
-        notional = wallet * pct
+        lev = self._leverage_for(side)  # margin = wallet × pct; notional = margin × leverage
+        notional = wallet * pct * Decimal(lev)
         floor = Decimal(str(self.max_notional_floor))
         if notional < floor:
             notional = floor

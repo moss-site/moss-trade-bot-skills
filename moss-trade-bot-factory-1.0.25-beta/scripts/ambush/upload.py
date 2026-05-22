@@ -133,6 +133,18 @@ def main() -> None:
 
     bot_id = resp.get("bot_id") or resp.get("agent_id") or "<unknown>"
     print(f"[ambush-upload] created ambush bot bot_id={bot_id}")
+    # Persist bot_id back into the creds file (parity with live_trade.py
+    # create-bot) so downstream tooling — live_runner, exit_watcher — can use
+    # the creds directly without a manual DB lookup. Only bot_id is written;
+    # base_url is left untouched (we never clobber it with --platform-url).
+    if bot_id and bot_id != "<unknown>":
+        try:
+            creds["bot_id"] = bot_id
+            with open(args.creds, "w") as f:
+                json.dump(creds, f, indent=2, ensure_ascii=False)
+            print(f"[ambush-upload] bot_id saved to {args.creds}")
+        except OSError as e:
+            print(f"[ambush-upload] WARN: failed to write bot_id to {args.creds}: {e}", file=sys.stderr)
     print(json.dumps(resp, indent=2, ensure_ascii=False))
 
 

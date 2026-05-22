@@ -28,6 +28,7 @@ DIRECTION_BALANCED = "balanced"
 REASON_USER_CONFIG = "user_config"
 REASON_INVALID_DIRECTION = "invalid_direction"
 REASON_RULE_NO_MATCH = "rule_no_match"
+REASON_DIRECTION_MISMATCH = "direction_mismatch"
 REASON_SHORT_COMPOUND_OVERSTRETCH = "rule_short_compound_overstretch"
 REASON_SHORT_EXTREME_PULLBACK = "rule_short_extreme_pullback"
 REASON_SHORT_SPIKE_EXTREME = "rule_short_spike_extreme"
@@ -56,13 +57,14 @@ class Decision(NamedTuple):
 
 
 def decide(inp: DecisionInput) -> Decision:
-    """Three-way dispatch by direction. Matches Go `strategy.Decide`."""
-    if inp.direction == DIRECTION_SHORT:
-        return Decision(SIDE_SHORT, REASON_USER_CONFIG)
-    if inp.direction == DIRECTION_LONG:
-        return Decision(SIDE_LONG, REASON_USER_CONFIG)
+    """Signal-first decision with direction used as an allowlist."""
     if inp.direction == DIRECTION_BALANCED:
         return balanced_decide_v0(inp)
+    if inp.direction in (DIRECTION_SHORT, DIRECTION_LONG):
+        signal = balanced_decide_v0(inp)
+        if signal.side in (SIDE_SKIP, inp.direction):
+            return signal
+        return Decision(SIDE_SKIP, REASON_DIRECTION_MISMATCH)
     return Decision(SIDE_SKIP, REASON_INVALID_DIRECTION)
 
 

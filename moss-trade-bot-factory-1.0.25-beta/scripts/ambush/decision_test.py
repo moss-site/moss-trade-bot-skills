@@ -92,18 +92,29 @@ class TestBalancedDecide(unittest.TestCase):
 
 
 class TestDispatch(unittest.TestCase):
-    def test_long_direction_short_circuits(self):
-        # direction=long must override balanced rules even with skip-shape signal.
-        inp = d.DecisionInput(0.0, 0.0, 0.0, d.DIRECTION_LONG)
+    def test_long_direction_allows_long_signal(self):
+        inp = d.DecisionInput(0.12, 55.0, 8.0, d.DIRECTION_LONG)
         got = d.decide(inp)
         self.assertEqual(got.side, d.SIDE_LONG)
-        self.assertEqual(got.reason, d.REASON_USER_CONFIG)
+        self.assertEqual(got.reason, d.REASON_LONG_MOMENTUM_INIT)
 
-    def test_short_direction_short_circuits(self):
-        inp = d.DecisionInput(0.0, 0.0, 0.0, d.DIRECTION_SHORT)
+    def test_long_direction_filters_short_signal(self):
+        inp = d.DecisionInput(0.22, 50.0, 25.0, d.DIRECTION_LONG)
+        got = d.decide(inp)
+        self.assertEqual(got.side, d.SIDE_SKIP)
+        self.assertEqual(got.reason, d.REASON_DIRECTION_MISMATCH)
+
+    def test_short_direction_allows_short_signal(self):
+        inp = d.DecisionInput(0.22, 50.0, 25.0, d.DIRECTION_SHORT)
         got = d.decide(inp)
         self.assertEqual(got.side, d.SIDE_SHORT)
-        self.assertEqual(got.reason, d.REASON_USER_CONFIG)
+        self.assertEqual(got.reason, d.REASON_SHORT_COMPOUND_OVERSTRETCH)
+
+    def test_short_direction_filters_long_signal(self):
+        inp = d.DecisionInput(0.12, 55.0, 8.0, d.DIRECTION_SHORT)
+        got = d.decide(inp)
+        self.assertEqual(got.side, d.SIDE_SKIP)
+        self.assertEqual(got.reason, d.REASON_DIRECTION_MISMATCH)
 
     def test_invalid_direction(self):
         inp = d.DecisionInput(0.0, 0.0, 0.0, "rotational")

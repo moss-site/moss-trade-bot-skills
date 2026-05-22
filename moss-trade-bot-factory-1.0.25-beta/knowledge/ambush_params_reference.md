@@ -11,12 +11,11 @@
 观察名单 OI 监控 → Z-Score > trigger.z_score_threshold     ⇒ 双门 ① 通过
 15m K线        → 涨幅 ≥ trigger.surge_15m_threshold       ⇒ 双门 ② 通过
 
-两门齐 → 按 direction 决策:
-  direction=short    → 立即做空（用 short_params）
-  direction=long     → 等 momentum_bars 根 K线 + 双重确认 → 做多（用 long_params）
-  direction=balanced → 规则判向（涨幅/RSI/24h前涨幅）
-                       命中 short 规则 → 做空（用 short_params）
-                       命中 long 规则  → 等动量确认 → 做多（用 long_params）
+两门齐 → 先规则判向，再按 direction 过滤:
+  规则判向（涨幅/RSI/24h前涨幅）→ signal=short/long/skip
+  direction=short    → 仅 signal=short 时做空（用 short_params）；signal=long/skip 则 skip
+  direction=long     → 仅 signal=long 时等 momentum_bars + 双重确认后做多（用 long_params）；signal=short/skip 则 skip
+  direction=balanced → signal=short 做空；signal=long 等动量确认后做多；signal=skip 则 skip
 
 决策方向 → 用对应 params（leverage/position_pct/stop_loss_pct/trailing_pct/max_hold_hours）走 source-core 下单
 ```
@@ -46,11 +45,11 @@
 | `z_score_threshold` | 1.5 ~ 3.0 | 2.0 | OI/MC 30 天 Z-Score 超此值算 OI 异动（双门 ①）。冷启动期（日线 OI < 14 天）退化为纯绝对值触发 |
 | `surge_15m_threshold` | 0.05 ~ 0.20 | 0.10 | 15m K 线涨幅 ≥ 此值算价格异动（双门 ②）|
 
-## 方向偏好
+## 方向控制
 
 | 字段 | 取值 | 含义 |
 |------|------|------|
-| `direction` | `long` / `short` / `balanced` | 触发后开仓方向偏好。**balanced 是默认推荐** |
+| `direction` | `long` / `short` / `balanced` | 触发后的方向过滤。所有方向都会先按规则信号判 `long` / `short` / `skip`；`long` / `short` 只放行同方向信号，反方向记为 `direction_mismatch` 并 skip；`balanced` 放行两边。**balanced 是默认推荐** |
 
 ### balanced 模式的判向规则 v0（不可调）
 
@@ -138,8 +137,8 @@ LONG 信号（任一满足）:
 
 | direction | long_params | short_params | 备注 |
 |---|---|---|---|
-| `long` | ✓ 用 | — 不生效 | 即便填了也不会用 |
-| `short` | — 不生效 | ✓ 用 | 即便填了也不会用 |
+| `long` | 命中 long 规则用 | — 不生效 | 只放行 long 信号；short 信号 skip |
+| `short` | — 不生效 | 命中 short 规则用 | 只放行 short 信号；long 信号 skip |
 | `balanced` | 命中 long 规则用 | 命中 short 规则用 | 规则判向后按方向取参 |
 
 > ⚠️ **propose.py 默认两组都填**。即便用户说"只做多"，short_params 也写全（避免用户后悔了改 direction 时丢参数）。

@@ -57,7 +57,7 @@ def balanced_decide(surge_15m: float, rsi_14: float, chg_before_24h: float) -> t
 
 def decide_for_event(event: dict, params: dict) -> tuple[str, str]:
     """
-    阈值过滤 + direction 分流 + （balanced）规则判向。
+    阈值过滤 + 规则判向 + direction 方向过滤。
     返回 (decision, reason)。
     """
     direction = params["direction"]
@@ -73,17 +73,16 @@ def decide_for_event(event: dict, params: dict) -> tuple[str, str]:
     # if event.get("z_score") is not None and event["z_score"] < trig["z_score_threshold"]:
     #     return ("skip", "below_z_score_threshold")
 
-    if direction == "short":
-        return ("short", "user_config")
-    if direction == "long":
-        return ("long", "user_config")
-
-    # balanced
-    return balanced_decide(
+    signal, reason = balanced_decide(
         event["surge_15m"],
         event.get("rsi_14") or 50,
         event.get("change_before_24h_pct") or 0,
     )
+    if direction == "balanced" or signal == "skip" or signal == direction:
+        return (signal, reason)
+    if direction in ("short", "long"):
+        return ("skip", "direction_mismatch")
+    return ("skip", "invalid_direction")
 
 
 # ===== 仓位演化 =====

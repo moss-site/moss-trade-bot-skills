@@ -188,6 +188,11 @@ C) 调整参数重跑
 - 含 "做多 / 看涨 / 跟趋势 / 上车" → `long`
 - 含 "都做 / 灵活 / 双向 / 不知道" 或留空 → `balanced`（默认）
 
+方向语义必须明确：
+- `direction=short`：只允许做空；若规则信号判为 long 或 skip，则本次事件 skip；命中 short 时使用 `short_params`
+- `direction=long`：只允许做多；若规则信号判为 short 或 skip，则本次事件 skip；命中 long 时使用 `long_params`
+- `direction=balanced`：触发后按规则信号动态判 `long` / `short` / `skip`，再使用命中方向对应参数
+
 **aggressiveness**:
 - 含 "稳健 / 小仓位 / 试水 / 保守" → `conservative`
 - 含 "激进 / 重仓 / 搏 / 大干" → `aggressive`
@@ -226,6 +231,8 @@ python3 {baseDir}/scripts/ambush/backtest.py \
 5s 内跑完 216 个历史异动事件回测，模拟仓位演化（按 leverage/stop_loss/trailing/max_hold）。**输出两块**：
 1. **总结表**：触发数 / 胜率 / 总收益 / 最大回撤 / Sharpe + 方向分布（long/short/skip）
 2. **最差 3 笔 + 最好 3 笔**（`--dump-trades 3` 自动打印）：让用户感性看清楚 "什么 case bot 会亏 / 什么 case 能抓到"
+
+回测方向必须和实盘方向语义一致：所有方向都会先按规则读事件信号；`short` / `long` 只放行同方向信号，反方向信号记为 `direction_mismatch` 并 skip；`balanced` 放行 long 和 short。
 
 **展示原则**：把上面两块都给用户看，**信息性参考，不挡** — 用户看完自己决定是否继续创建。回测结果差不一定阻止（市场未来不等于历史）；但用户应该 informed before 上实盘。
 

@@ -67,7 +67,7 @@ python3 {baseDir}/scripts/ambush/backtest.py \
 }
 ```
 
-> ⚠️ 即便用户选 `direction=long`，propose.py 仍要填 `short_params` 默认值（避免后悔改 direction 后丢参数）。回测时只生效对应方向的 params。
+> ⚠️ 即便用户选 `direction=long`，propose.py 仍要填 `short_params` 默认值（避免后悔改 direction 后丢参数）。回测方向语义和实盘一致：每个事件先按规则信号判 `long` / `short` / `skip`；`direction=long` / `short` 只放行同方向信号，反方向记为 `direction_mismatch` 并 skip；`direction=balanced` 放行 long 和 short，并使用命中方向对应 params。
 
 ## 输出格式
 

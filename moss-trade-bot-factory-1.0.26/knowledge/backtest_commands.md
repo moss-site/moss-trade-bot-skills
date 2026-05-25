@@ -2,7 +2,30 @@
 
 SKILL.md Step 3 触发时再读这份。本文件只放可直接拷贝执行的 bash 范本，不重复 Step 3 的决策流程（哪种模式 / 何时反思 / A/B/C 选择）。
 
-`<SYMBOL>` / `$DATA_CSV` / `<bar数>` / `<资金>` 等占位由 Step 1 / Step 2 已经决定。
+**硬前置条件**：只有 `/tmp/backtest_request.json` 已存在，且内容包含非空 `symbol / strategy_style / data_csv / range_mode / source_text` 时才能使用本文件。若不存在或字段不满足，说明自然语言请求还没补齐；必须回到 SKILL.md 入口路由，运行 `dataset_catalog.py` 展示 CSV 覆盖并询问缺失字段，禁止继续写参数或运行回测。
+
+`<SYMBOL>` / `$DATA_CSV` / `<bar数>` / `<资金>` 等占位由入口路由 / Step 2 已经决定。
+
+建议先从请求状态文件恢复已解析的信息：
+
+```bash
+REQUEST=/tmp/backtest_request.json
+DATA_CSV=$(python3 -c "import json; print(json.load(open('$REQUEST'))['data_csv'])")
+SYMBOL=$(python3 -c "import json; print(json.load(open('$REQUEST'))['symbol'])")
+RANGE_MODE=$(python3 -c "import json; print(json.load(open('$REQUEST')).get('range_mode', 'default'))")
+BACKTEST_START=$(python3 -c "import json; print(json.load(open('$REQUEST')).get('start') or '')")
+BACKTEST_END=$(python3 -c "import json; print(json.load(open('$REQUEST')).get('end') or '')")
+```
+
+如果请求状态里有 `start/end`，设置自定义区间；否则使用全部可用数据：
+
+```bash
+if [ -n "$BACKTEST_START" ] || [ -n "$BACKTEST_END" ]; then
+  FETCH_RANGE_ARGS=(--start "$BACKTEST_START" --end "$BACKTEST_END" --range-mode custom)
+else
+  FETCH_RANGE_ARGS=()
+fi
+```
 
 ---
 
@@ -13,7 +36,7 @@ cat > /tmp/bot_params.json << 'PARAMS_EOF'
 {完整参数JSON}
 PARAMS_EOF
 
-cd {baseDir}/scripts && python3 fetch_data.py --data "$DATA_CSV" --symbol <SYMBOL> --timeframe 15m 2>/dev/null > /tmp/fingerprint.json
+cd {baseDir}/scripts && python3 fetch_data.py --data "$DATA_CSV" --symbol "$SYMBOL" --timeframe 15m "${FETCH_RANGE_ARGS[@]}" 2>/dev/null > /tmp/fingerprint.json
 CSV_PATH=$(python3 -c "import json; print(json.load(open('/tmp/fingerprint.json'))['csv_path'])")
 cd {baseDir}/scripts && python3 run_backtest.py \
   --data "$CSV_PATH" --params-file /tmp/bot_params.json \
@@ -32,7 +55,7 @@ cd {baseDir}/scripts && python3 run_backtest.py \
 cat > /tmp/bot_params.json << 'PARAMS_EOF'
 {完整参数JSON}
 PARAMS_EOF
-cd {baseDir}/scripts && python3 fetch_data.py --data "$DATA_CSV" --symbol <SYMBOL> --timeframe 15m 2>/dev/null > /tmp/fingerprint.json
+cd {baseDir}/scripts && python3 fetch_data.py --data "$DATA_CSV" --symbol "$SYMBOL" --timeframe 15m "${FETCH_RANGE_ARGS[@]}" 2>/dev/null > /tmp/fingerprint.json
 ```
 
 ### B2. 用同一份参数跑分段 baseline（每段都用初始参数）

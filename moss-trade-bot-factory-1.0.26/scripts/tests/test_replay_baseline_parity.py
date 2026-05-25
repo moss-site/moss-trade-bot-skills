@@ -15,7 +15,9 @@ SCRIPTS = os.path.dirname(HERE)
 if SCRIPTS not in sys.path:
     sys.path.insert(0, SCRIPTS)
 
-from core.leverage_caps import cap_params_for_symbol, max_leverage_for_symbol
+import json
+
+from core.leverage_caps import ASSET_MAX_LEVERAGES, cap_params_for_symbol, max_leverage_for_symbol
 from core.backtest import _aggregate_trades_backend_style, _apply_backend_style_trade_metrics
 from core.engine import BacktestResult
 from core.replay_baseline import (
@@ -127,6 +129,26 @@ class LeverageCapsTest(unittest.TestCase):
         op = cap_params_for_symbol({"base_leverage": 10.0, "max_leverage": 40.0}, "OPUSDC")
         self.assertEqual(op["base_leverage"], 5.0)
         self.assertEqual(op["max_leverage"], 5.0)
+
+    def test_every_per_symbol_cap_fits_within_schema_absolute_max(self):
+        """Regression: a per-symbol cap above the schema/engine ceiling would be
+        silently truncated locally (e.g. SP500 50x clamped to 40x), making local
+        backtest diverge from the platform verify replay. Pin the relationship so
+        any future cap bump forces a matching schema/engine bump."""
+        schema_path = os.path.join(SCRIPTS, "params_schema.json")
+        with open(schema_path, encoding="utf-8") as f:
+            schema = json.load(f)
+        schema_max = int(schema["params"]["max_leverage"]["max"])
+        offenders = {sym: cap for sym, cap in ASSET_MAX_LEVERAGES.items() if cap > schema_max}
+        self.assertEqual(
+            offenders,
+            {},
+            f"per-symbol caps exceed schema max_leverage.max={schema_max}; "
+            f"raise params_schema.json + decision.py + backtest.py ceilings to match: {offenders}",
+        )
+        # And the schema ceiling must actually be reachable by the highest cap,
+        # otherwise the schema is needlessly loose.
+        self.assertEqual(schema_max, max(ASSET_MAX_LEVERAGES.values()))
 
 
 class BackendStyleTradeMetricTest(unittest.TestCase):

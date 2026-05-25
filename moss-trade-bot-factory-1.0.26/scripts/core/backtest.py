@@ -86,7 +86,7 @@ def _replay_notional_tolerance(target_notional: float) -> float:
 def _weighted_leverage(weighted: float, total: float) -> int:
     if total <= 0:
         return 1
-    return max(1, min(int(round(weighted / total)), 40))
+    return max(1, min(int(round(weighted / total)), 50))
 
 
 def _holding_hours_between(df: pd.DataFrame, entry_idx: int, exit_idx: int) -> float:

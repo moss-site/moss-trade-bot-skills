@@ -40,15 +40,11 @@
 
 ### 数据要求
 
-平台按上传包里的 `data_fingerprint.start/end` 在固定数据集内做服务端回放校验。BTC 当前固定数据集为 **2025-07-01 00:00:00 ~ 2026-04-30 23:45:00**，文件名 `hyperliquid_BTCUSDC_15m_2025-07-01_304d.csv`；其他大多数币种仍是 **2025-10-06 ~ 2026-03-03** 的 `2025-10-06_148d` 文件。fingerprint 和 result 必须来自同一份 CSV 和同一段区间。
+平台按上传包里的 `data_fingerprint.start/end` 在固定数据集内做服务端回放校验。**fingerprint 和 result 必须来自同一份 CSV 和同一段区间**；具体覆盖（每币的 `start/end/bars`、是否短历史）一律以 `dataset_catalog.py` 输出为准，不要在文档里写死日期或按文件版本号（`148d`/`304d`）推断天数。
 
-**短历史 xyz 资产例外**（2026-05-18 加入）：以下 3 个 xyz 资产在 Hyperliquid 上市晚，CSV 命名仍是 `_2025-10-06_148d` 但实际数据短于 148 天：
-- `xyz:SP500` / `xyz:BRENTOIL`：起 2026-03-27（约 52 天）
-- `xyz:CBRS`：起 2026-05-01（约 17 天）
+平台 verify 用 fingerprint 里的 start/end 算 actual 区间，**接受短于文件版本号天数的窗口**（上市晚的 xyz 资产、用户自定义子区间都属此类），不要按"固定 148 天"之类的旧不变量误判。
 
-回测 + verify 都接受这些短窗口（平台 verify 用 fingerprint 里的 start/end 算 actual 区间，不强求 148 天），不要按旧不变量误判。
-
-- 回测 / 上传验证使用预置的 Hyperliquid 固定数据集 CSV（`scripts/data_cache/` 目录，43 币）
+- 回测 / 上传验证使用预置的 Hyperliquid 固定数据集 CSV（`scripts/data_cache/` 目录，43 币）；上传前必须以 `dataset_catalog.py` 实际发现的 `csv_path/start/end/bars` 为准，不要使用旧的固定区间记忆
 - 上传包中的 Bot 文案现在应显式带双语：`name_i18n/personality_i18n/description_i18n = {zh, en}`
 - 上传接口现在按请求体严格校验双语字段：缺任意一个 `*_i18n.zh/en`，即使旧单字段有值，也会直接拒绝
 - 若中文文案含中文字符，`package_upload.py` 会要求你补充自然英文版本；不要把中文原样复制到 `en`
@@ -216,7 +212,7 @@ python3 live_trade.py trades --creds ~/.moss-trade-bot/agent_creds.json
 ### 交易规则
 
 - 支持 `BTCUSDC` 及主流山寨币合约（`ETHUSDC`、`SOLUSDC` 等，以 `GET /api/v2/moss/agent/supported-symbols` 返回列表为准），仅市价单
-- 杠杆 1-40x（按币种实际上限封顶，详见 `knowledge/leverage_caps.md`）
+- 杠杆 1-50x（按币种实际上限封顶，全表最高 SP500 50x / BTC 40x，详见 `knowledge/leverage_caps.md`）
 - 下单金额 = `free_margin × risk_per_trade × leverage`
 - 开仓前检查 free_margin
 - STALE_MARK_PRICE → 等待几秒重试

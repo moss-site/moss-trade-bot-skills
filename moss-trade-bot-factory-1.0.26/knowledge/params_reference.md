@@ -50,12 +50,12 @@
 
 | 参数 | 范围        | 含义 |
 |------|-----------|------|
-| base_leverage | 1~40      | 基础杠杆倍数 |
-| max_leverage | 1~40      | 最大杠杆 |
+| base_leverage | 1~50      | 基础杠杆倍数 |
+| max_leverage | 1~50      | 最大杠杆 |
 | risk_per_trade | 0.01~0.50 | 每笔交易使用资金比例 |
 | max_position_pct | 0.05~1.0  | 单笔最大资金占比 |
 
-> ⚠️ **`base_leverage` / `max_leverage` 的 `1~40` 是 schema 允许写入的绝对上下界，不是 per-symbol 实际可用范围。**
+> ⚠️ **`base_leverage` / `max_leverage` 的 `1~50` 是 schema 允许写入的绝对上下界（50x = SP500），不是 per-symbol 实际可用范围。**
 > 写参数前必须按 [`leverage_caps.md`](./leverage_caps.md) 对应 symbol 封顶（例如 DOGE 10x、ATOM 5x），超出 per-symbol cap 会在 bot 创建（v2 HMAC `POST /agent/realtime/bots`）和后续下单层被拒（错误码 `INVALID_ARGUMENT` / `max_leverage exceeds <symbol> asset cap`）。BTC 例外，cap 即 40x。
 
 ## 止损/止盈

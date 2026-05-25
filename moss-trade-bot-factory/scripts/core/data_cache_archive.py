@@ -1,0 +1,264 @@
+from __future__ import annotations
+
+import csv
+import hashlib
+import json
+import os
+import posixpath
+import shutil
+import subprocess
+import tarfile
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+
+SCRIPTS_DIR = Path(__file__).resolve().parents[1]
+MANIFEST_PATH = SCRIPTS_DIR / "data_cache_manifest.json"
+LOCAL_DATA_DIR = SCRIPTS_DIR / "data_cache"
+LOCK_TIMEOUT_SECONDS = 600
+
+
+class DataCacheError(RuntimeError):
+    pass
+
+
+def load_manifest(path: str | os.PathLike[str] | None = None) -> dict[str, Any]:
+    manifest_path = Path(path or MANIFEST_PATH)
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise DataCacheError(f"failed to read data cache manifest: {manifest_path}: {exc}") from exc
+    required = {"version", "repo", "tag", "asset_name", "archive_sha256", "files"}
+    missing = sorted(required - set(manifest))
+    if missing:
+        raise DataCacheError(f"data cache manifest missing fields: {missing}")
+    if not isinstance(manifest["files"], list) or not manifest["files"]:
+        raise DataCacheError("data cache manifest has no files")
+    return manifest
+
+
+def cache_dir_for_manifest(manifest: dict[str, Any]) -> Path:
+    root = Path(
+        os.environ.get("MOSS_TRADE_BOT_CACHE_DIR", "~/.cache/moss-trade-bot-factory")
+    ).expanduser()
+    return root / f"v{manifest['version']}" / "data_cache"
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _csv_fingerprint(path: Path) -> tuple[int, str]:
+    try:
+        with path.open(newline="", encoding="utf-8") as f:
+            rows = list(csv.reader(f))
+    except Exception as exc:
+        raise DataCacheError(f"failed to read CSV {path}: {exc}") from exc
+    if not rows:
+        raise DataCacheError(f"empty CSV: {path}")
+    return len(rows), rows[-1][0]
+
+
+def validate_data_cache(data_dir: Path, manifest: dict[str, Any]) -> None:
+    for item in manifest["files"]:
+        rel_path = item.get("path")
+        if not rel_path:
+            raise DataCacheError("manifest file entry missing path")
+        path = data_dir / Path(rel_path).name
+        if not path.is_file():
+            raise DataCacheError(f"missing cached CSV: {path}")
+        actual_sha = _sha256_file(path)
+        if actual_sha != item.get("sha256"):
+            raise DataCacheError(f"CSV checksum mismatch: {path}")
+        row_count, last_ts = _csv_fingerprint(path)
+        if row_count != item.get("row_count"):
+            raise DataCacheError(f"CSV row_count mismatch: {path}")
+        if last_ts != item.get("last_timestamp"):
+            raise DataCacheError(f"CSV last_timestamp mismatch: {path}")
+
+
+def _github_token() -> str | None:
+    for env_name in ("GITHUB_TOKEN", "GH_TOKEN"):
+        value = os.environ.get(env_name)
+        if value:
+            return value.strip()
+    try:
+        proc = subprocess.run(
+            ["gh", "auth", "token"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return None
+    token = proc.stdout.strip()
+    return token or None
+
+
+def _request(url: str, token: str | None = None, accept: str | None = None) -> urllib.request.Request:
+    headers = {"User-Agent": "moss-trade-bot-factory-data-cache"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    if accept:
+        headers["Accept"] = accept
+    return urllib.request.Request(url, headers=headers)
+
+
+def _release_asset_api_url(manifest: dict[str, Any], token: str) -> str:
+    api_url = f"https://api.github.com/repos/{manifest['repo']}/releases/tags/{manifest['tag']}"
+    with urllib.request.urlopen(
+        _request(api_url, token=token, accept="application/vnd.github+json"),
+        timeout=60,
+    ) as resp:
+        release = json.loads(resp.read().decode("utf-8"))
+    for asset in release.get("assets", []):
+        if asset.get("name") == manifest["asset_name"]:
+            return asset["url"]
+    raise DataCacheError(f"release asset not found: {manifest['asset_name']}")
+
+
+def _download_help(manifest: dict[str, Any]) -> str:
+    return (
+        f"failed to download data cache release asset {manifest['asset_name']} "
+        f"from {manifest['repo']} {manifest['tag']}. Check that the GitHub "
+        "Release and asset exist. If the repository or asset is private, make "
+        "sure your GitHub account has access and set GITHUB_TOKEN/GH_TOKEN or "
+        "run `gh auth login`."
+    )
+
+
+def download_archive(destination: Path, manifest: dict[str, Any]) -> None:
+    token = _github_token()
+    try:
+        if token:
+            url = _release_asset_api_url(manifest, token)
+            request = _request(url, token=token, accept="application/octet-stream")
+        else:
+            url = manifest.get(
+                "asset_url",
+                f"https://github.com/{manifest['repo']}/releases/download/{manifest['tag']}/{manifest['asset_name']}",
+            )
+            request = _request(url, accept="application/octet-stream")
+        with urllib.request.urlopen(request, timeout=300) as resp, destination.open("wb") as out:
+            shutil.copyfileobj(resp, out)
+    except urllib.error.HTTPError as exc:
+        raise DataCacheError(f"{_download_help(manifest)} HTTP {exc.code}: {exc.reason}") from exc
+    except urllib.error.URLError as exc:
+        raise DataCacheError(f"{_download_help(manifest)} {exc.reason}") from exc
+    except OSError as exc:
+        raise DataCacheError(f"{_download_help(manifest)} {exc}") from exc
+
+
+def _safe_member_name(member_name: str, expected: set[str]) -> str | None:
+    normalized = posixpath.normpath(member_name.replace("\\", "/"))
+    if normalized.startswith("/"):
+        raise DataCacheError(f"unsafe archive member path: {member_name}")
+    if normalized in (".", "data_cache"):
+        return None
+    if normalized == ".." or normalized.startswith("../") or not normalized.startswith("data_cache/"):
+        raise DataCacheError(f"unsafe archive member path: {member_name}")
+    if normalized not in expected:
+        raise DataCacheError(f"unexpected archive member: {member_name}")
+    return PurePosixPath(normalized).name
+
+
+def extract_archive(archive_path: Path, target_dir: Path, manifest: dict[str, Any]) -> None:
+    expected = {item["path"] for item in manifest["files"]}
+    target_dir.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(archive_path, "r:gz") as tf:
+        for member in tf.getmembers():
+            out_name = _safe_member_name(member.name, expected)
+            if out_name is None:
+                continue
+            if not member.isfile():
+                raise DataCacheError(f"unexpected non-file archive member: {member.name}")
+            source = tf.extractfile(member)
+            if source is None:
+                raise DataCacheError(f"failed to extract archive member: {member.name}")
+            with source, (target_dir / out_name).open("wb") as out:
+                shutil.copyfileobj(source, out)
+    validate_data_cache(target_dir, manifest)
+
+
+class _DirectoryLock:
+    def __init__(self, path: Path):
+        self.path = path
+        self.fd: int | None = None
+
+    def __enter__(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        start = time.time()
+        while True:
+            try:
+                self.fd = os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(self.fd, str(os.getpid()).encode("ascii"))
+                return self
+            except FileExistsError:
+                if time.time() - start > LOCK_TIMEOUT_SECONDS:
+                    try:
+                        self.path.unlink()
+                    except FileNotFoundError:
+                        pass
+                time.sleep(0.1)
+
+    def __exit__(self, exc_type, exc, tb):
+        if self.fd is not None:
+            os.close(self.fd)
+        try:
+            self.path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def ensure_data_cache() -> Path:
+    manifest = load_manifest()
+    data_dir = cache_dir_for_manifest(manifest)
+    lock_path = data_dir.parent / ".hydrate.lock"
+    with _DirectoryLock(lock_path):
+        if data_dir.is_dir():
+            try:
+                validate_data_cache(data_dir, manifest)
+                return data_dir
+            except DataCacheError:
+                shutil.rmtree(data_dir, ignore_errors=True)
+
+        parent = data_dir.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".hydrate-", dir=str(parent)) as tmp:
+            tmp_path = Path(tmp)
+            archive_path = tmp_path / manifest["asset_name"]
+            staged_dir = tmp_path / "data_cache"
+            download_archive(archive_path, manifest)
+            if _sha256_file(archive_path) != manifest["archive_sha256"]:
+                raise DataCacheError("data cache archive checksum mismatch")
+            extract_archive(archive_path, staged_dir, manifest)
+            os.replace(staged_dir, data_dir)
+    return data_dir
+
+
+def ensure_data_file(path: str | os.PathLike[str]) -> str:
+    candidate = Path(path)
+    if candidate.is_file():
+        return str(candidate)
+
+    manifest = load_manifest()
+    basename = candidate.name
+    expected_names = {Path(item["path"]).name for item in manifest["files"]}
+    if basename not in expected_names:
+        raise FileNotFoundError(f"CSV file not found: {candidate}")
+
+    data_dir = ensure_data_cache()
+    cached = data_dir / basename
+    if not cached.is_file():
+        raise FileNotFoundError(f"CSV file not found after data cache hydrate: {cached}")
+    return str(cached)

@@ -1,0 +1,268 @@
+{
+  "version": "1.0.26",
+  "repo": "moss-site/moss-trade-bot-skills",
+  "tag": "v1.0.26",
+  "asset_name": "data_cache-v1.0.26.tar.gz",
+  "asset_url": "https://github.com/moss-site/moss-trade-bot-skills/releases/download/v1.0.26/data_cache-v1.0.26.tar.gz",
+  "archive_sha256": "06d7cdfd97134c3e03bc29579c772fe73f548050f12385b2e8f848916d4f6756",
+  "files": [
+    {
+      "path": "data_cache/hyperliquid_ADAUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "48e277e85788290cf5cfaa853dcd7e362da3d9fdf92b738406a0e011f1eaf0d2",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_AMDUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "23194e7acdece3e9575deaca2fd7baa3d978f8f6861fd04096cf4f3acf8a934f",
+      "row_count": 8489,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_APTUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "08cc7accbe2b876a8d436db400f6d10f77313005875035fec41cecc57834407a",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_ARBUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "a42a0ad11b48c33bccf81dd8559f57153abd6e2637587f5af40bb579506b9f14",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_ATOMUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "7d5f6811384b75c8fe29716bfbe29cea5c7dc72f8c626168aaf156bc729f6d14",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_AVAXUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "3498f03d7a437629f95b8c160cbc3939ce1bf4ed0cdb11c2ab612a8755c9d7a5",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_BCHUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "30f02cea76f32f663edb4b927613cf7cb90ed5565f34de47ba5240e09ff424c8",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_BNBUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "fce72268627a33d3f6f5ff2726edba1e63f35e98a62ce9d1fbbd86493fd5affe",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_BRENTOILUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "a1ac718afb3b6a7061b01d41af814bd31e71bf333f7c4e6f63b71b0b450a071f",
+      "row_count": 5004,
+      "last_timestamp": "2026-05-18 09:00:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_BTCUSDC_15m_2025-07-01_304d.csv",
+      "sha256": "74ce5115b480ce4a5da16b3ff1f9821da34ad8e317de98b1d4a2caceccc17919",
+      "row_count": 29185,
+      "last_timestamp": "2026-04-30 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_CBRSUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "f1d972bdbb29332dc07fb49fcfe428cbfb3125d2b3d7c117c3937cd56a2cef59",
+      "row_count": 1664,
+      "last_timestamp": "2026-05-18 09:00:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_CLUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "4417fcc9fb03d1c72b9a67b392a8970ef8915fe7ae711d72d1e91f3ad5d70e6d",
+      "row_count": 5321,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_COINUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "5c35725cd98ec68ab53db2823cc9b55ef292952144f953eea912f84aa7e93271",
+      "row_count": 9343,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_CRCLUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "a6cfe9e474e307c1e49ee13660c1281634343b4fe9d6b46967a5761d18a95de5",
+      "row_count": 7429,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_DOGEUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "7b4b388ea338ac9bcd9dd6a6c32b4acfecc0df786da9d90e9f51edf814a20cfb",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_DOTUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "71a031e861e41a50be5dc663b786d3c7e72239969827bc386deb3aea3d29339b",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_ETHUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "e47d4a4e73456e6e66745a555fe61c2a2e01847068be303cde49c37e690fa839",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_FILUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "d49c870149246f62888849700457da626947ab3120a073a643f8488045c0754e",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_GOLDUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "eee7ea4a555015166dd6f5b821b3d76087676b90612bf95edb0ee51765773e50",
+      "row_count": 6761,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_GOOGLUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "b168d1c15fbb91f0751bc30bb5e10847893cc28136f8789479fcdb2c1429ab29",
+      "row_count": 10018,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_HBARUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "4a3f5bcc68e5964494fb3926ea54d2c828168ec33bd725f7a24d6077564469ae",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_HYPEUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "a7af6fd72c9ada8b29a8d0960fb90018cbef9a0ff49784091d9a3ad5557e0e00",
+      "row_count": 14210,
+      "last_timestamp": "2026-03-03 00:00:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_INTCUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "8b64b1e9ddad6cd4c4382d9619bb2fcc1f7688edf178531e6dcd9612067f5178",
+      "row_count": 8585,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_LINKUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "0df5bdc129c3e71c422b598530ab09264f93c10eb67770ddbcec47b172025336",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_LTCUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "53c1c5ab56d38ad57ccafa226da808cb77bbbb8671a8b9489823cd1dfc358ba4",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_METAUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "aae8a8ebde6cc4dfe8376fa8d700b7ecdbc633cb92547e8df75296f2cc70e66e",
+      "row_count": 9833,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_MSTRUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "cc337aba3ed0280ee8acdb61152866b4a28c4a6bdb0b16ff928fb5aedecc546b",
+      "row_count": 8679,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_MUUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "dbafba9a208b8fe37354c0a5e3938d31350b45146ae29a6540c86e922fdeeeef",
+      "row_count": 7041,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_NEARUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "f7526c876e18e64e3c0107093abbfb30b35d079378c7f67776401d851f1dcecc",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_NVDAUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "119d93c03345b43ff61aedef8594047c166fccd96a6ef759bcf22a98fa4b624b",
+      "row_count": 10579,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_OPUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "08b061594df956a2f438beb2443e30578d1ce233fbc11f797a740b583eb6372c",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_ORCLUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "5232dd26c105558eb1e2aa739eb86a697f454e8d9aa316c16046a27ecff30ce0",
+      "row_count": 8393,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_SILVERUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "c05847d97f4095228e0b740f9d3a724332d4b72b754b13a51a877a718c41519c",
+      "row_count": 6435,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_SKHXUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "3543e652bf9f55e3f0cf9f6864d2894cac3823726874afdb1b9cf8b7ffa00392",
+      "row_count": 1062,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_SNDKUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "baf10541c42d874c4d2bb25457eb1310c6914fd57c8011aeb73bd8f4e72794a5",
+      "row_count": 4745,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_SOLUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "1e8cbc52ffa239e418d8700c6d2d3baf8a0e9c460b991e39fd9f89d76bed0123",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_SP500USDC_15m_2025-10-06_148d.csv",
+      "sha256": "9a3e01c06e82ef7bc4b86bcda4c891f6346fe54abb0b36135a09e42f862f5ab8",
+      "row_count": 5003,
+      "last_timestamp": "2026-05-18 09:00:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_SUIUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "27acda743e032a549b3d476d2f58cce6c98d22b7d0226b989373827915d5f31b",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_TRXUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "50521370e2719c07c42a2dcc3a6b24a44eda9290da61fc0a29c5f7bf5747d35c",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_TSLAUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "db7522f9ab181944bf0041baf661aaf96816c125ffef7bd5f70f6b648c2c6e05",
+      "row_count": 10505,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_UNIUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "5122cef0f877662a07dd329348dd9062c14ec877e3224d9a72d93152fb640725",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_XRPUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "192808913bc73e18aee3af475b6d97cfc2619d9136732166a795764e7bb18a64",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_XYZ100USDC_15m_2025-10-06_148d.csv",
+      "sha256": "4bcacf9c55a1fe172f124c57f05f0b5512e6af37c44612dbac60edce90cd8833",
+      "row_count": 13490,
+      "last_timestamp": "2026-03-03 00:15:00"
+    }
+  ]
+}

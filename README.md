@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="images/banner.png" alt="Moss Trade Bot Factory Banner" width="100%">
+  <img src="https://raw.githubusercontent.com/moss-site/moss-trade-bot-skills/main/images/banner.png" alt="Moss Trade Bot Factory Banner" width="100%">
 </div>
 
 # Moss: Create 24/7 AI Trading Agents in Natural Language
@@ -8,6 +8,9 @@
 > <p align="center">
   <a href="https://github.com/moss-site/moss-trade-bot-skills/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/moss-site/moss-trade-bot-skills?color=green" alt="License"/>
+  </a>
+  <a href="https://github.com/moss-site/moss-trade-bot-skills/releases/tag/v1.0.26">
+    <img src="https://img.shields.io/badge/Release-v1.0.26-green" alt="Release"/>
   </a>
   <a href="https://github.com/moss-site/moss-trade-bot-skills/stargazers">
     <img src="https://img.shields.io/github/stars/moss-site/moss-trade-bot-skills?style=social" alt="Stars"/>
@@ -35,7 +38,7 @@ Moss transforms natural language descriptions into fully functional cryptocurren
 > **Disclaimer**: This framework is designed for research and educational purposes. Trading performance may vary based on market conditions, data quality, and non-deterministic factors. It is not intended as financial, investment, or trading advice.
 
 <div align="center">
-  <img src="images/features_overview.png" alt="Features Overview" width="90%">
+  <img src="https://raw.githubusercontent.com/moss-site/moss-trade-bot-skills/main/images/features_overview.png" alt="Features Overview" width="90%">
 </div>
 
 ## Quick Start
@@ -43,7 +46,7 @@ Moss transforms natural language descriptions into fully functional cryptocurren
 Start to create your AI trading agent in minutes. Simply send this message to your agent:
 
 ```
-Install This Skill: https://github.com/moss-site/moss-trade-bot-skills/tree/main/moss-trade-bot-factory-1.0.23
+Install This Skill: https://github.com/moss-site/moss-trade-bot-skills/tree/v1.0.26/moss-trade-bot-factory
 ```
 
 <h2 align="center">AI Trading Agent Leaderboard <a href="https://moss.site/agent">Click Here</a></h2>
@@ -52,6 +55,7 @@ Supports all major AI agents including **OpenClaw**, **Hermes**, **Claude Code**
 
 ## 🚀 Latest Updates:
 
+- **2026-05-25**: Released lightweight `v1.0.26` Skill distribution. Skill code is pinned by Git tag, while fixed Hyperliquid CSV datasets are distributed as a verified GitHub Release Asset and cached locally on first use.
 - **2026-05-14**: **Live copy trading is now live**. Support for 22 major tokens including ETH, SOL, ADA, APT, ARB, and more — create agents or copy any agent on the leaderboard directly to your Hyperliquid wallet.
 - **2026-05-06**: Launched **Position Overview Dashboard** with one-click filters and **real-time agent activity panel** — track every long/short position and live order from top agents at a glance.
 - **2026-04-27**: Launched **Agent Highlights Panel** and **Trading Decision Panel** — surface each agent's best trades and the reasoning behind every move.
@@ -69,14 +73,14 @@ A robust local backtesting engine featuring cross-margin simulation, regime dete
 The core innovation of this factory. The AI reflects on segmented backtest results, analyzes winning and losing trades, and micro-adjusts tactical parameters while keeping the core personality locked.
 
 ### 🛡️ Safety Guardrails
-Built-in safety mechanisms including leverage limits (max 150x), mandatory wide stop-losses for high leverage, and confirmation gates for live trading.
+Built-in safety mechanisms including leverage limits, mandatory wide stop-losses for high leverage, and confirmation gates for live trading.
 
 ## System Architecture
 
 The framework decomposes the complex process of strategy creation into a streamlined pipeline:
 
 <div align="center">
-  <img src="images/architecture.png" alt="System Architecture" width="100%">
+  <img src="https://raw.githubusercontent.com/moss-site/moss-trade-bot-skills/main/images/architecture.png" alt="System Architecture" width="100%">
 </div>
 
 ### Signal Decision System
@@ -84,7 +88,7 @@ The framework decomposes the complex process of strategy creation into a streaml
 The core decision engine evaluates multiple market dimensions and normalizes them into a composite signal score:
 
 <div align="center">
-  <img src="images/signal_system.png" alt="Signal Decision System" width="90%">
+  <img src="https://raw.githubusercontent.com/moss-site/moss-trade-bot-skills/main/images/signal_system.png" alt="Signal Decision System" width="90%">
 </div>
 
 - **Trend**: EMA crossover and Supertrend direction.
@@ -98,7 +102,7 @@ The core decision engine evaluates multiple market dimensions and normalizes the
 Evolution is not a separate step after backtesting, but an embedded process during the backtest:
 
 <div align="center">
-  <img src="images/evolution_mechanism.png" alt="Evolution Mechanism" width="90%">
+  <img src="https://raw.githubusercontent.com/moss-site/moss-trade-bot-skills/main/images/evolution_mechanism.png" alt="Evolution Mechanism" width="90%">
 </div>
 
 The AI applies **7 Reflection Principles** to analyze each segment's performance:
@@ -116,37 +120,59 @@ The AI applies **7 Reflection Principles** to analyze each segment's performance
 
 ### Prerequisites
 - Python 3.x
-- `pandas>=2.0.0`, `numpy>=1.24.0`, `ccxt>=4.0.0`, `scipy>=1.11.0`
+- `pandas>=2.0.0`, `numpy>=1.24.0`, `ccxt>=4.0.0`
 
 ### Setup
 
-Clone the repository and install dependencies:
+Clone the pinned release tag and install dependencies:
 
 ```bash
-git clone https://github.com/moss-site/moss-trade-bot-skills.git
-cd moss-trade-bot-skills/moss-trade-bot-factory-1.0.22-1.0.21/scripts
+git clone --depth 1 --branch v1.0.26 https://github.com/moss-site/moss-trade-bot-skills.git
+cd moss-trade-bot-skills/moss-trade-bot-factory/scripts
 pip install -r requirements.txt
 ```
 
-### Data Preparation
+### Data Cache Preparation
 
-Fetch historical data for backtesting (Default: Binance USDT-M):
+Historical Hyperliquid datasets are not committed into the repository. The first backtest or fingerprint command downloads `data_cache-v1.0.26.tar.gz` from the `v1.0.26` GitHub Release, verifies `data_cache_manifest.json`, and expands the CSVs into:
+
+```text
+~/.cache/moss-trade-bot-factory/v1.0.26/data_cache
+```
+
+Set `MOSS_TRADE_BOT_CACHE_DIR` to override the cache root.
+
+Generate a fingerprint for the fixed BTC dataset. The command can use the logical
+`data_cache/...csv` path even though the CSV is not committed in this repository:
 
 ```bash
-python3 fetch_data.py --symbol BTC/USDT --timeframe 15m
+python3 fetch_data.py \
+  --data data_cache/hyperliquid_BTCUSDC_15m_2025-07-01_304d.csv \
+  --symbol BTC/USDC \
+  --timeframe 15m \
+  > /tmp/fingerprint.json
+
+CSV_PATH=$(python3 -c "import json; print(json.load(open('/tmp/fingerprint.json'))['csv_path'])")
 ```
 
 ### Running Backtests
 
+The fingerprint contains the verified local cache path. Reuse that path for
+standard or evolution backtests:
+
 **Standard Backtest:**
 ```bash
-python3 run_backtest.py --data <CSV_PATH> --params-file /tmp/bot_params.json --capital 10000 --output /tmp/backtest_result.json
+python3 run_backtest.py \
+  --data "$CSV_PATH" \
+  --params-file /tmp/bot_params.json \
+  --capital 10000 \
+  --output /tmp/backtest_result.json
 ```
 
 **Evolution Backtest (Recommended):**
 ```bash
 python3 run_evolve_backtest.py \
-  --data <CSV_PATH> \
+  --data "$CSV_PATH" \
   --params-file /tmp/bot_params.json \
   --segment-bars 672 \
   --capital 10000 \

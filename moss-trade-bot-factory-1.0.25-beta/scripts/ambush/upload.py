@@ -100,7 +100,7 @@ def upload_ambush_verify_job(
     )
 
     payload = {
-        "version": "1",
+        "version": "1.0",
         "bot": {
             "name_zh": "AmbushVerify",
             "name_en": "AmbushVerify",
@@ -116,7 +116,7 @@ def upload_ambush_verify_job(
             "last_bar_close_time": "2026-01-01T00:00:00Z", "fingerprint_hex": "",
         },
         "backtest_result": {
-            "version": "1", "total_return_pct": 0, "sharpe": 0,
+            "version": "1.0", "total_return_pct": 0, "sharpe": 0,
             "max_drawdown_pct": 0, "win_rate": 0, "total_trades": 0,
         },
         # Ambush-specific fields.
@@ -127,14 +127,14 @@ def upload_ambush_verify_job(
         "dataset_sha256": ds_sha,
         "local_fingerprint": fp,
         "local_result": {
-            "final_wallet":     str(result.final_wallet),
+            "final_wallet":     str(result.final_wallet.quantize(Decimal("0.01"))),  # cents, matches StringFixed(2)
             "events_total":     result.events_total,
             "events_traded":    result.events_traded,
             "events_skipped":   result.events_skipped,
             "total_trades":     result.total_trades,
             "win_rate":         f"{result.win_rate:.4f}",
             "sharpe":           f"{result.sharpe:.4f}",
-            "max_drawdown_pct": f"{result.max_drawdown_pct:.4f}",
+            "max_drawdown_pct": f"{result.max_drawdown_pct:.4f}",  # raw signed pct (negative for drawdowns)
         },
     }
 

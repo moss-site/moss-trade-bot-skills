@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 """
-Ambush bot 上传：直接调 server 端 V2 create_realtime_bot (HMAC)，
-**不**走 backtest verify 路径。
+Ambush bot 上传：支持两种模式。
 
-设计 §5.1 / §6.3：ambush 没有 K 线连续回放，平台 verify (`/backtest/verify`) 期望
-DecisionParams + 单 symbol K 线 fingerprint，与 ambush 双通道参数 + symbol="*"
-不兼容。本地 216 事件回测 + decision unit test 已经覆盖决策正确性 + 统计性能，
-server 端无需另一次 verify。
+## 模式 1 (默认): create-realtime-bot
+直接调 server 端 V2 create_realtime_bot (HMAC)，不走 backtest verify 路径。
 
-流程：
   1. 读 ambush_params.json (propose.py 输出) + ambush_backtest_result.json
   2. 转 V2 wire 格式 (decimal → string, see trading_client._ambush_params_for_wire)
   3. 调 client.create_realtime_bot(strategy_type="ambush", ambush_params=...)
   4. 平台 ambush 注册器 (cmd/server/ambush.go RegisterAmbushBot) 自动订阅事件链
+
+## 模式 2 (--ambush-verify): chained backtest verify-job
+本地运行 ChainedHarness，计算 fingerprint，POST 到 /api/v1/moss/agent/backtest/verify，
+server 端重新验算 fingerprint 并入队 strategy_type='ambush' 的 verify job。
+
+  1. 计算 dataset SHA-256 (data_cache/ambush/{events,features,klines})
+  2. 计算 canonical fingerprint (params + initial_capital + harness_version + dataset_sha256)
+  3. 本地运行 ChainedHarness 得到 local_result
+  4. POST payload 到 server；server 验证 fingerprint 后入队 verify job
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ import argparse
 import json
 import os
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -29,6 +35,9 @@ if str(PARENT_DIR) not in sys.path:
     sys.path.insert(0, str(PARENT_DIR))
 
 from trading_client import TradingClient  # noqa: E402
+
+
+_DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data_cache" / "ambush"
 
 
 def _load_creds(creds_path: str) -> dict:
@@ -41,25 +50,209 @@ def _load_creds(creds_path: str) -> dict:
         return json.load(f)
 
 
+def upload_ambush_verify_job(
+    creds: dict,
+    base_url: str,
+    raw_params: dict,
+    data_dir: Path,
+    user_uuid: str,
+    dry_run: bool = False,
+) -> tuple[int, dict]:
+    """POST /backtest/verify-job with the ambush payload shape.
+
+    Workflow (Task 3.3):
+      1. Load dataset + compute dataset SHA-256.
+      2. Compute canonical fingerprint (params + initial_capital + harness_version).
+      3. Run the ChainedHarness locally to produce local_result metrics.
+      4. Build and POST the full payload to /api/v1/moss/agent/backtest/verify-job.
+
+    Returns (status_code, response_dict).
+    """
+    from ambush.chained_harness import AmbushBotParams, ChainedHarness, load_dataset
+    from ambush.fingerprint import canonical, dataset_sha256, CURRENT_HARNESS_VERSION
+
+    params = AmbushBotParams.from_dict(raw_params)
+
+    # Initial capital from params or default $10000.
+    initial_capital_str = str(raw_params.get("initial_capital", "10000") or "10000")
+    initial_capital = Decimal(initial_capital_str)
+
+    print(f"[ambush-verify] computing dataset SHA from {data_dir} ...")
+    ds_sha = dataset_sha256(data_dir)
+    print(f"[ambush-verify] dataset SHA: {ds_sha}")
+
+    fp = canonical(
+        strategy_type="ambush",
+        harness_version=CURRENT_HARNESS_VERSION,
+        dataset_sha256=ds_sha,
+        initial_capital=initial_capital,
+        params=params,
+    )
+    print(f"[ambush-verify] local fingerprint: {fp}")
+
+    print(f"[ambush-verify] running chained harness locally ...")
+    dataset = load_dataset(data_dir)
+    result = ChainedHarness(params).run(dataset, initial_capital)
+    print(
+        f"[ambush-verify] harness done: events_total={result.events_total} "
+        f"events_traded={result.events_traded} events_skipped={result.events_skipped} "
+        f"final_wallet={result.final_wallet}"
+    )
+
+    payload = {
+        "version": "1",
+        "bot": {
+            "name_zh": "AmbushVerify",
+            "name_en": "AmbushVerify",
+            "persona_zh": "ambush",
+            "persona_en": "ambush",
+            "description_zh": "ambush verify",
+            "description_en": "ambush verify",
+        },
+        # Legacy majors-shaped fields kept for schema compatibility (omitempty on server).
+        "data_fingerprint": {
+            "symbol": "*", "timeframe": "15m", "exchange": "hyperliquid",
+            "bars": 0, "first_bar_open_time": "2025-01-01T00:00:00Z",
+            "last_bar_close_time": "2026-01-01T00:00:00Z", "fingerprint_hex": "",
+        },
+        "backtest_result": {
+            "version": "1", "total_return_pct": 0, "sharpe": 0,
+            "max_drawdown_pct": 0, "win_rate": 0, "total_trades": 0,
+        },
+        # Ambush-specific fields.
+        "strategy_type": "ambush",
+        "ambush_params": params.to_dict(),
+        "initial_capital": str(initial_capital),
+        "harness_version": CURRENT_HARNESS_VERSION,
+        "dataset_sha256": ds_sha,
+        "local_fingerprint": fp,
+        "local_result": {
+            "final_wallet":     str(result.final_wallet),
+            "events_total":     result.events_total,
+            "events_traded":    result.events_traded,
+            "events_skipped":   result.events_skipped,
+            "total_trades":     result.total_trades,
+            "win_rate":         f"{result.win_rate:.4f}",
+            "sharpe":           f"{result.sharpe:.4f}",
+            "max_drawdown_pct": f"{result.max_drawdown_pct:.4f}",
+        },
+    }
+
+    if dry_run:
+        print("[ambush-verify] DRY RUN — would POST:")
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0, payload
+
+    # Route: agentBacktest.POST("/backtest/verify") under /api/v1/moss/agent
+    # Uses HMAC auth via TradingClient (same as create_realtime_bot).
+    client = TradingClient(
+        api_key=creds.get("api_key", ""),
+        api_secret=creds.get("api_secret", ""),
+        base_url=base_url,
+    )
+    print(f"[ambush-verify] POSTing /backtest/verify (HMAC) to {base_url} ...")
+    try:
+        body = client._request(
+            method="POST",
+            path="/backtest/verify",
+            body=payload,
+            custom_prefix="/api/v1/moss/agent",
+        )
+        status = 200
+    except Exception as exc:
+        # TradingClient raises urllib.error.HTTPError on non-2xx responses.
+        import urllib.error
+        if isinstance(exc, urllib.error.HTTPError):
+            try:
+                body = json.loads(exc.read().decode())
+            except Exception:
+                body = {"raw": str(exc)}
+            status = exc.code
+        else:
+            raise
+    return status, body
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--params", required=True, help="ambush 参数 JSON（来自 propose.py）")
     p.add_argument("--backtest-result", default="",
                    help="本地回测结果 JSON（来自 backtest.py，仅作 console 摘要打印；不上传）")
-    p.add_argument("--display-name", required=True, help="bot 名（中文）")
+    p.add_argument("--display-name", default="",
+                   help="bot 名（中文，create-bot 路径必填；--ambush-verify 路径忽略）")
     p.add_argument("--display-name-en", default="", help="bot 名（英文，缺省 = display-name）")
-    p.add_argument("--persona", required=True, help="人设（中文）")
+    p.add_argument("--persona", default="", help="人设（中文，create-bot 路径必填）")
     p.add_argument("--persona-en", default="", help="人设（英文，缺省 = persona）")
-    p.add_argument("--description", required=True, help="描述（中文）")
+    p.add_argument("--description", default="", help="描述（中文，create-bot 路径必填）")
     p.add_argument("--description-en", default="", help="描述（英文，缺省 = description）")
     p.add_argument("--platform-url", default="",
                    help="平台 URL，例如 https://moss-dev.moss.site；缺省读 creds.base_url")
     p.add_argument("--creds", required=True, help="agent_creds.json 路径（bind 后保存的 HMAC 凭证）")
     p.add_argument("--dry-run", action="store_true",
                    help="只打印将要发送的请求体，不实际调用平台")
+    # Ambush verify-job mode (Task 3.3).
+    p.add_argument(
+        "--ambush-verify", action="store_true",
+        help=(
+            "Run the chained harness locally, compute fingerprint, and POST to "
+            "/api/v1/moss/agent/backtest/verify-job instead of creating a realtime bot. "
+            "Requires --params (ambush params JSON) and --data-dir (or uses default "
+            "data_cache/ambush). Server must have Stage 2 (verify dispatcher) deployed."
+        ),
+    )
+    p.add_argument(
+        "--data-dir", default="",
+        help="Path to data_cache/ambush directory (for --ambush-verify). "
+             "Defaults to <skill_root>/data_cache/ambush.",
+    )
+    p.add_argument(
+        "--user-uuid", default="",
+        help="User UUID for /backtest/verify-job?user_uuid= (for --ambush-verify). "
+             "If omitted, reads user_uuid from creds file.",
+    )
     args = p.parse_args()
 
     raw_params = json.loads(Path(args.params).read_text())
+
+    # --- Ambush verify-job path (Task 3.3) ---
+    if args.ambush_verify:
+        if raw_params.get("strategy_type") != "ambush":
+            print(
+                f"[ambush-verify] ERROR: params strategy_type={raw_params.get('strategy_type')!r}, expected 'ambush'",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        creds = _load_creds(args.creds)
+        base_url = args.platform_url or creds.get("base_url", "")
+        if not base_url:
+            raise SystemExit(
+                "platform base URL missing. Pass --platform-url or save base_url in agent_creds.json."
+            )
+        user_uuid = args.user_uuid or creds.get("user_uuid", "")
+        data_dir = Path(args.data_dir) if args.data_dir else _DEFAULT_DATA_DIR
+        status, body = upload_ambush_verify_job(
+            creds=creds,
+            base_url=base_url,
+            raw_params=raw_params,
+            data_dir=data_dir,
+            user_uuid=user_uuid,
+            dry_run=args.dry_run,
+        )
+        if not args.dry_run:
+            print(f"[ambush-verify] HTTP {status}")
+            print(json.dumps(body, indent=2, ensure_ascii=False))
+            if status not in (200, 201):
+                sys.exit(1)
+        return
+
+    # --- Original create-realtime-bot path ---
+    if not args.display_name:
+        raise SystemExit("--display-name is required for the create-bot path (or use --ambush-verify)")
+    if not args.persona:
+        raise SystemExit("--persona is required for the create-bot path (or use --ambush-verify)")
+    if not args.description:
+        raise SystemExit("--description is required for the create-bot path (or use --ambush-verify)")
+
     if raw_params.get("strategy_type") != "ambush":
         print(
             f"[ambush-upload] ERROR: params strategy_type={raw_params.get('strategy_type')!r}, expected 'ambush'",

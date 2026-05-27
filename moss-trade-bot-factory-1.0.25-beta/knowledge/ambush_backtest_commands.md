@@ -183,7 +183,36 @@ BONK/USDC        2025-06-14    short  rule_short_spike_extreme           3    +3
 
 ## 不做的事
 
-- ❌ Ambush bot **不需要 fingerprint**（majors 是单币 + K 线时段唯一标识；ambush 是事件集合 + 阈值组合，无固定 K 线流）
 - ❌ Ambush bot **不需要 evolve**（参数固化）
-- ❌ Ambush bot **不调用平台 verify**（path 是平台 walk-forward；ambush 不兼容 — 没有 K 线连续回放语义，server 端用同一份事件 dataset 也无法等价重放）
 - ❌ Ambush bot 上传时 `data_fingerprint.symbol` 写 `null` 或 `"*"`（不绑币）
+
+## 平台 verify（可选，2026-05-27 之后）
+
+Ambush 现在**支持**平台 verify，与主流币 verify 是**完全不同的契约**：
+
+- 主流币 verify：走 K 线 walk-forward，按 (symbol, timeframe, date_range) 对账。
+- Ambush verify：走**事件 dataset + 链式仓位回放**。skill 端用 `ChainedHarness` 跑出 `local_result`，
+  连同 `fingerprint`（params + initial_capital + harness_version + dataset_sha256 的 SHA-256）一起
+  POST 到 `/api/v1/moss/agent/backtest/verify-job`。server 端用同一份 dataset 重新跑链式 harness，
+  对账 fingerprint；一致则签名通过，server 端持久化 verify job + 完整 trades/equity 工件，用户能拿到
+  "平台已验证此参数集" 的凭证（详情接口、leaderboard、follower 都会读这个）。
+
+何时**应该**调 verify：
+- 用户想把这个 ambush bot 公开到 leaderboard（必须有 server-side verified backtest）
+- 用户拿不准本地结果是否能在平台复现，想跑一遍对账
+- 上线前的最后一道双方算法一致性检查
+
+何时**可以跳过**：
+- 用户只是想 propose → create-bot → 直接看实盘表现，对历史不在乎
+- 已经 verify 过一遍且参数没改
+
+命令模板（Step 3 后的可选 Step 3.5）：
+
+```bash
+python3 {baseDir}/scripts/ambush/upload.py \
+  --params /tmp/ambush_params.json \
+  --backtest-result /tmp/ambush_backtest_result.json \
+  --creds ~/.moss-trade-bot/agent_creds.json \
+  --ambush-verify
+# 输出:fingerprint 一致性结论 + server-side trades/equity 工件链接
+```

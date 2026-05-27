@@ -240,6 +240,41 @@ python3 {baseDir}/scripts/ambush/backtest.py \
 
 回测命令完整参考：`cat {baseDir}/knowledge/ambush_backtest_commands.md`
 
+**回测结果展示后**，给用户**这套** options（顺序固定，不要漏掉 verify 这一条）：
+
+1. **调参数** → 改 `direction` / `aggressiveness` / `position_pct` 后回到 Ambush Step 2 重跑 propose + backtest
+2. **平台 verify**（推荐）→ 进 Ambush Step 3.5，把链式回测上传到平台对账（fingerprint match 后服务器端再算一遍）
+3. **直接创建实盘** → 跳到 Ambush Step 4，不 verify 直接 bind + create-bot
+4. **取消** → 结束流程
+
+不要发明菜单顺序，也不要省略「平台 verify」选项 — 它对要把 bot 公开到 leaderboard 的用户是必经路径。
+
+### Ambush Step 3.5: 平台 verify（可选）
+
+如果用户选 "上传平台 verify" / "对账" / "走 verify" / "我要 leaderboard"，跑这一条：
+
+```bash
+python3 {baseDir}/scripts/ambush/upload.py \
+  --params /tmp/ambush_params.json \
+  --backtest-result /tmp/ambush_backtest_result.json \
+  --creds ~/.moss-trade-bot/agent_creds.json \
+  --ambush-verify
+```
+
+输出要点：
+- `fingerprint match`：skill 本地链式回测和 server 重算结果**完全一致**（params + initial_capital + harness_version + dataset_sha256 的 SHA-256 哈希相同）
+- `verify_job_id`：平台侧持久化的 verify 记录，详情接口 / leaderboard / follower 会读这个
+- server-side `trades` / `equity` 工件链接（用户可以对照本地 `--dump-trades 3` 看哪笔不一致）
+
+如果 `fingerprint mismatch`：说明 skill 和 server 对同一份 (params, dataset) 算出不同结果，**算法层面 drift**。这种情况停下来报告，不要继续到 Step 4。原因通常是：
+- skill 端 `chained_harness.py` 或 `backtest.py::_apply_trade_costs` 跟 server 端 Go 实现不同步
+- dataset 文件被改过，本地 SHA 跟 server 的不匹配
+- harness_version 不匹配（skill 用 v1，server 期望 v2 之类）
+
+verify 通过后，**自动续接到 Step 4 创建实盘 bot**（不要再问用户一次 "要不要建 bot"，verify 通过就是用户的下一步信号）。
+
+verify + 创建 bot 详情参考：`cat {baseDir}/knowledge/ambush_backtest_commands.md`（"平台 verify" 段）
+
 ### Ambush Step 4: 用户确认 → 绑定 + 创建 bot
 
 用户确认后才走，平台连接 + 凭证规则按「安全与透明声明」执行。

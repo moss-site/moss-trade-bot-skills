@@ -56,6 +56,12 @@ def upload_ambush_verify_job(
     raw_params: dict,
     data_dir: Path,
     user_uuid: str,
+    display_name: str = "",
+    display_name_en: str = "",
+    persona: str = "",
+    persona_en: str = "",
+    description: str = "",
+    description_en: str = "",
     dry_run: bool = False,
 ) -> tuple[int, dict]:
     """POST /backtest/verify-job with the ambush payload shape.
@@ -99,15 +105,33 @@ def upload_ambush_verify_job(
         f"final_wallet={result.final_wallet}"
     )
 
+    # Build bot.* metadata using the same i18n shape the majors verify-job
+    # uses (server's backtest.UploadBot expects name_i18n / personality_i18n /
+    # description_i18n, NOT flat name_zh / persona_zh — those just get dropped
+    # at JSON unmarshal time and the backtest-agent row ends up with empty
+    # display_name/persona/description, leaving "Agent agt_xxx" + "暂无描述"
+    # on the leaderboard).
+    #
+    # Defaults are sensible placeholders when the caller doesn't supply args
+    # (so a bare `upload.py --ambush-verify` still gives the backtest agent a
+    # readable identity rather than blanks).
+    name_zh = display_name or "Ambush 异动币回测"
+    name_en = display_name_en or display_name or "Ambush backtest"
+    persona_zh = persona or "异动币策略 chained-backtest"
+    persona_en = persona_en or persona or "Ambush chained-backtest"
+    desc_zh = description or "基于历史异动事件链式回测;不绑定固定币种,按 direction/position_pct/leverage/stop/trailing 等参数复盘 216 个事件。"
+    desc_en = description_en or description or "Chained-backtest replay over historical ambush events; not bound to one symbol, walks 216 events with direction/position_pct/leverage/stop/trailing."
+
     payload = {
         "version": "1.0",
         "bot": {
-            "name_zh": "AmbushVerify",
-            "name_en": "AmbushVerify",
-            "persona_zh": "ambush",
-            "persona_en": "ambush",
-            "description_zh": "ambush verify",
-            "description_en": "ambush verify",
+            "name": name_zh,
+            "name_i18n": {"zh": name_zh, "en": name_en},
+            "personality": persona_zh,
+            "personality_i18n": {"zh": persona_zh, "en": persona_en},
+            "description": desc_zh,
+            "description_i18n": {"zh": desc_zh, "en": desc_en},
+            "params": {},
         },
         # Legacy majors-shaped fields kept for schema compatibility (omitempty on server).
         "data_fingerprint": {
@@ -236,6 +260,12 @@ def main() -> None:
             raw_params=raw_params,
             data_dir=data_dir,
             user_uuid=user_uuid,
+            display_name=args.display_name,
+            display_name_en=args.display_name_en,
+            persona=args.persona,
+            persona_en=args.persona_en,
+            description=args.description,
+            description_en=args.description_en,
             dry_run=args.dry_run,
         )
         if not args.dry_run:

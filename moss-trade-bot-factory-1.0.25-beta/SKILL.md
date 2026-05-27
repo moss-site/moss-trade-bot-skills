@@ -183,6 +183,12 @@ C) 调整参数重跑
 
 从用户描述中**直接推断**，不主动反问。模糊就用默认。只有自相矛盾（"稳健的高杠杆"）才反问一次。
 
+> ⚠️ **杠杆固定 3x，用户改不了**。Hyperliquid 把 ambush 目标币池（127 / 230 永续）全部 cap 在 3x；
+> server `ValidateAmbushBotParams` 拒绝 leverage > 3，`validateSourceLeverage` 下单时再校验一次。
+> skill propose.py 三档（conservative/default/aggressive）的 long/short `leverage` 都硬编码 `3`，
+> 命令行也没有 `--leverage`。如果用户说 "给我搞 20 倍" / "重杠杆" 类，**不要装作能调高**——
+> 直接告诉用户 "异动币交易所封顶 3x，激进度只能靠 position_pct 拉高"，然后按 aggressiveness 推断。
+
 **direction**:
 - 含 "做空 / 看跌 / 顶部 / 收割 / 反弹" → `short`
 - 含 "做多 / 看涨 / 跟趋势 / 上车" → `long`

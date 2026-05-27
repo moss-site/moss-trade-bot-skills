@@ -266,8 +266,21 @@ python3 {baseDir}/scripts/ambush/upload.py \
   --params /tmp/ambush_params.json \
   --backtest-result /tmp/ambush_backtest_result.json \
   --creds ~/.moss-trade-bot/agent_creds.json \
+  --display-name "<给这个 ambush bot 起个名,如 '稳健双向异动 alpha'>" \
+  --display-name-en "<English name, e.g. 'Steady ambush alpha'>" \
+  --persona "<人设,一两句,如 '稳健双向,严格止损,只抓高质量异动'>" \
+  --persona-en "<English persona>" \
+  --description "<策略描述,1-3 句,讲清 direction/仓位/止损/止盈逻辑>" \
+  --description-en "<English description>" \
   --ambush-verify
 ```
+
+> ⚠️ 这 6 个文案参数是为了让 backtest agent 在列表/leaderboard 上有人看得懂的名字 +
+> 描述（否则会显示 "Agent agt_xxx" + "暂无描述"，因为 server 端 backtest agent
+> 文案就从 verify-job payload 的 `bot.name_i18n` / `personality_i18n` /
+> `description_i18n` 来）。从 propose 阶段已经知道用户的策略风格了，按 Step 1
+> 推断的 (direction, aggressiveness) 生成自然中文名，**不要让用户重复输入**。
+> 缺省也行，upload.py 会兜底用 "Ambush 异动币回测"，但显然不如 LLM 生成的好看。
 
 输出要点：
 - `fingerprint match`：skill 本地链式回测和 server 重算结果**完全一致**（params + initial_capital + harness_version + dataset_sha256 的 SHA-256 哈希相同）

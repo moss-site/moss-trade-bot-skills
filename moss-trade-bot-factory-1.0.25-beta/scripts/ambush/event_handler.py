@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 import traceback
@@ -231,6 +232,36 @@ def _parse_trigger_ts(event: dict) -> datetime | None:
     return _parse_iso_utc(raw)
 
 
+_FRACTIONAL_SECONDS_RE = re.compile(r"\.(\d+)")
+
+
+def _normalize_fractional_seconds(text: str) -> str:
+    """Pad/truncate fractional seconds to exactly 6 digits.
+
+    Python 3.9's `datetime.fromisoformat` only accepts 3- or 6-digit
+    fractional seconds; 4, 5, or 7+ digits raise `ValueError: Invalid
+    isoformat string`. The server's `ambush_event.trigger_ts` JSON
+    encoding can emit any precision (we've observed 3-, 5-, and 6-digit
+    forms depending on how Postgres rendered the timestamp), so the
+    skill must be defensive and normalize before parsing.
+
+    Returns `text` unchanged when no fractional component is present.
+    """
+    m = _FRACTIONAL_SECONDS_RE.search(text)
+    if m is None:
+        return text
+    digits = m.group(1)
+    if len(digits) == 6:
+        return text
+    # Truncate >6 (datetime can't represent sub-μs anyway).
+    if len(digits) > 6:
+        digits = digits[:6]
+    else:
+        # Pad with zeros so 3.69435 → 694350μs (= 0.69435s, identical).
+        digits = digits.ljust(6, "0")
+    return text[: m.start()] + "." + digits + text[m.end():]
+
+
 def _parse_iso_utc(raw: Any) -> datetime | None:
     if not raw:
         return None
@@ -238,6 +269,7 @@ def _parse_iso_utc(raw: Any) -> datetime | None:
         text = str(raw).strip()
         if text.endswith("Z"):
             text = text[:-1] + "+00:00"
+        text = _normalize_fractional_seconds(text)
         dt = datetime.fromisoformat(text)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
@@ -280,11 +312,20 @@ def _format_seconds(s: float) -> str:
 
 def _is_detected_signal_stale(event: dict) -> bool:
     """True when the event is older than `_DETECTED_SIGNAL_STALE_AFTER_SECONDS`.
-    Defensive: returns False when trigger_ts is unparseable (don't skip
-    on data we can't classify — let the normal decider run)."""
+
+    Fail-closed on unparseable trigger_ts: return True so the caller skips.
+    Acting on an event of unknown age is strictly worse than skipping —
+    the 5-rule decider's snapshot features (surge_15m / rsi_14 /
+    chg_24h_pct) only make sense if we can confirm we're still inside
+    the 1h freshness window. Previously the function returned False
+    here, which let any malformed trigger_ts slip through; the
+    `_normalize_fractional_seconds` pad in `_parse_iso_utc` now covers
+    the known Postgres-precision-jitter case (3 / 5 / 6 digit μs) but
+    the fail-closed default protects against future encoder changes
+    too."""
     age = _event_age_seconds(event)
     if age is None:
-        return False
+        return True
     return age > _DETECTED_SIGNAL_STALE_AFTER_SECONDS
 
 

@@ -285,26 +285,47 @@ verify + 创建 bot 详情参考：`cat {baseDir}/knowledge/ambush_backtest_comm
 
 用户确认后才走，平台连接 + 凭证规则按「安全与透明声明」执行。
 
+> ⚠️ **必须用 `scripts/ambush/upload.py`，不要用 `scripts/live_trade.py create-bot`**。
+> `live_trade.py create-bot` 是**主流币专用**入口，调 `client.create_realtime_bot()` 时不传
+> `strategy_type` 和 `ambush_params`，server 会按 majors 路径校验 `DecisionParams` 并报
+> `rolling_max_times out of range`（ambush 参数里没这个字段）。`upload.py` 的默认模式
+> （不加 `--ambush-verify`）专门走 ambush 分流：发 `strategy_type="ambush"` + 完整
+> `ambush_params`，server 走 `ValidateAmbushBotParams` 路径。
+
 ```bash
 # 如未绑定，先 bind（与主流币流程共用，platform_ops.md 也有）
 python3 {baseDir}/scripts/live_trade.py bind \
   --pair-code <user-提供> \
   --platform-url <skill config trade_api_url>
 
-# 创建 ambush bot — symbol 写 "*" 占位符
-python3 {baseDir}/scripts/live_trade.py create-bot \
+# 创建 ambush bot — 默认模式（不带 --ambush-verify）= create-realtime-bot
+python3 {baseDir}/scripts/ambush/upload.py \
+  --params /tmp/ambush_params.json \
+  --backtest-result /tmp/ambush_backtest_result.json \
   --creds ~/.moss-trade-bot/agent_creds.json \
-  --params-file /tmp/ambush_params.json \
-  --name-zh "<生成的中文 bot 名>" --name-en "<English name>" \
-  --persona-zh "<中文 persona>" --persona-en "<English persona>" \
-  --description-zh "<中文 desc>" --description-en "<English desc>" \
-  --symbol "*"
+  --display-name "<生成的中文 bot 名>" \
+  --display-name-en "<English name>" \
+  --persona "<中文 persona>" \
+  --persona-en "<English persona>" \
+  --description "<中文 desc>" \
+  --description-en "<English desc>"
 ```
 
+`upload.py` 内部:
+1. 读 `/tmp/ambush_params.json`（含 direction / long_params / short_params / rhythm）
+2. 转 V2 wire 格式（decimal → string，per `trading_client._ambush_params_for_wire`）
+3. 调 `client.create_realtime_bot(strategy_type="ambush", ambush_params=...)`，
+   server 端 `RealtimeBotService.CreateBot` 见 `isAmbush=true` 走双通道 schema 校验，
+   `DecisionParams` 完全不参与
+4. 平台 ambush 注册器（`cmd/server/ambush.go RegisterAmbushBot`）自动订阅事件链
+5. 写回 `agent_creds.json` 的 `bot_id`
+
+**不需要** `--symbol "*"` 这种参数 — server 自动塞 `AmbushBotSymbolPlaceholder`。
+
 **双语文案约束**（与主流币一致）：
-- `name_i18n.zh/en <= 64` 字
-- `persona_i18n.zh/en <= 64` 字
-- `description_i18n.zh/en <= 280` 字
+- `display_name` / `display_name_en` <= 64 字
+- `persona` / `persona_en` <= 64 字
+- `description` / `description_en` <= 280 字
 - 用户原始描述是中文时，必须自己写自然的英文版（不要 copy 中文到 en 字段）
 
 server 端 `ValidateAmbushBotParams` 通过后返回 `bot_id`，已自动写回 `agent_creds.json`。

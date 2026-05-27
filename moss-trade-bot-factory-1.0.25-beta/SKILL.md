@@ -249,11 +249,13 @@ python3 {baseDir}/scripts/ambush/backtest.py \
 **回测结果展示后**，给用户**这套** options（顺序固定，不要漏掉 verify 这一条）：
 
 1. **调参数** → 改 `direction` / `aggressiveness` / `position_pct` 后回到 Ambush Step 2 重跑 propose + backtest
-2. **平台 verify**（推荐）→ 进 Ambush Step 3.5，把链式回测上传到平台对账（fingerprint match 后服务器端再算一遍）
-3. **直接创建实盘** → 跳到 Ambush Step 4，不 verify 直接 bind + create-bot
+2. **仅平台 verify**（推荐，不上线）→ 进 Ambush Step 3.5，把链式回测上传到平台对账。**跑完就停**，等用户下一步指令再走 Step 4
+3. **直接创建实盘**（跳过 verify）→ 跳到 Ambush Step 4，不 verify 直接 bind + create-bot
 4. **取消** → 结束流程
 
-不要发明菜单顺序，也不要省略「平台 verify」选项 — 它对要把 bot 公开到 leaderboard 的用户是必经路径。
+**option 2 ≠ option 3**：option 2 只对账，**绝不** 自动续接 Step 4 create-bot；option 3 是不 verify 直接上实盘。用户选哪个就严格做哪个。
+
+不要发明菜单顺序，也不要漏「平台 verify」选项 — 它对要把 bot 公开到 leaderboard 的用户是必经路径。
 
 ### Ambush Step 3.5: 平台 verify（可选）
 
@@ -277,7 +279,14 @@ python3 {baseDir}/scripts/ambush/upload.py \
 - dataset 文件被改过，本地 SHA 跟 server 的不匹配
 - harness_version 不匹配（skill 用 v1，server 期望 v2 之类）
 
-verify 通过后，**自动续接到 Step 4 创建实盘 bot**（不要再问用户一次 "要不要建 bot"，verify 通过就是用户的下一步信号）。
+verify 通过后，**只展示结果，停下等用户**。不要自动走 Step 4 create-bot — 用户选「仅 verify」就是想先看对账结果再决定，不是想一步建实盘。
+
+展示完 verify 结果（fingerprint match / verify_job_id / server-side trades 链接），再给用户一组 **新菜单**：
+
+1. **创建实盘 bot** → 走 Ambush Step 4（用同一份 `/tmp/ambush_params.json`，无需再 propose / backtest / verify）
+2. **重跑 verify**（如果对结果不放心）→ 再来一次 Step 3.5
+3. **改参数重跑** → 回 Ambush Step 2 重新生成参数
+4. **结束** → 不上实盘，保留 verify 记录就够了
 
 verify + 创建 bot 详情参考：`cat {baseDir}/knowledge/ambush_backtest_commands.md`（"平台 verify" 段）
 

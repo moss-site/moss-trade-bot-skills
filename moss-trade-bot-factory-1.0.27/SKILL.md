@@ -356,8 +356,29 @@ python3 {baseDir}/scripts/ambush/upload.py \
 
 输出要点：
 - `fingerprint match`：skill 本地链式回测和 server 重算结果**完全一致**（params + initial_capital + harness_version + dataset_sha256 的 SHA-256 哈希相同）
-- `verify_job_id`：平台侧持久化的 verify 记录，详情接口 / leaderboard / follower 会读这个
-- server-side `trades` / `equity` 工件链接（用户可以对照本地 `--dump-trades 3` 看哪笔不一致）
+- `verify_job_id`：平台侧持久化的 verify 记录,详情接口 / leaderboard / follower 会读这个
+- server-side `trades` / `equity` 工件链接(用户可以对照本地 `--dump-trades 3` 看哪笔不一致)
+
+**显示给用户(严格按这个格式)**:
+
+```
+✅ 平台 verify 完成
+
+| 项目     | 结果                          |
+| ------- | ----------------------------- |
+| 状态     | ✅ Verified                    |
+| 匹配     | ✅ Match (本地 vs 平台完全一致) |
+| Verify ID | <返回的 bot_id UUID>          |
+```
+
+⚠️ **不要把这个 UUID 标成 "Bot ID"**。它是 `agent_trade_backtest_bots` 表的回测档案
+PK,不是可交易的实盘 bot。实盘 bot ID 是 `agt_<32hex>` 格式,只有 Step 4
+create-realtime-bot 才会返回。这里返回的 UUID **只能用于**:
+- 查 leaderboard 上的这条记录
+- `GET /backtest/bots/<uuid>` 看完整回测详情
+
+server response 字段名虽然叫 `bot_id`,但**对用户展示时一律叫 "Verify ID"**,
+避免误导成"我已经有可下单的 bot 了"。
 
 如果 `fingerprint mismatch`：说明 skill 和 server 对同一份 (params, dataset) 算出不同结果，**算法层面 drift**。这种情况停下来报告，不要继续到 Step 4。原因通常是：
 - skill 端 `chained_harness.py` 或 `backtest.py::_apply_trade_costs` 跟 server 端 Go 实现不同步
@@ -366,7 +387,7 @@ python3 {baseDir}/scripts/ambush/upload.py \
 
 verify 通过后，**只展示结果，停下等用户**。不要自动走 Step 4 create-bot — 用户选「仅 verify」就是想先看对账结果再决定，不是想一步建实盘。
 
-展示完 verify 结果（fingerprint match / verify_job_id / server-side trades 链接），再给用户一组 **新菜单**：
+展示完 verify 结果(状态 / 匹配 / **Verify ID**),再给用户一组 **新菜单**：
 
 1. **创建实盘 bot** → 走 Ambush Step 4（用同一份 `/tmp/ambush_params.json`，无需再 propose / backtest / verify）
 2. **重跑 verify**（如果对结果不放心）→ 再来一次 Step 3.5

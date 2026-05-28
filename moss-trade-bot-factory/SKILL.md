@@ -1,5 +1,5 @@
 ---
-name: moss-trade-bot-factory-1.0.27
+name: moss-trade-bot-factory
 description: 用户用自然语言描述币种、回测时间区间和策略风格时，自动创建加密货币交易 Bot，读取内置 Hyperliquid CSV 覆盖并运行本地回测/进化；若币种、时间区间或策略风格缺失，则主动询问缺失项并展示 CSV 解析出的可用回测区间。也可在回测后上传平台 verify 或创建模拟实盘 Bot。**此版本还支持异动币（ambush）策略**：监听小市值币 OI 异动事件触发的链式回测+实盘策略，与主流币是两条独立路径，详见末尾 "Ambush Bot 创建流程" 段。适用于创建bot、交易策略、回测、backtest、evolve、upload verify、live trading、异动币、ambush 等请求。
 metadata: {"openclaw": {"requires": {"bins": ["python3"]}, "emoji": "🤖"}}
 ---

@@ -4,6 +4,817 @@
   "tag": "v1.0.27-beta",
   "asset_name": "data_cache-v1.0.27.tar.gz",
   "asset_url": "https://github.com/moss-site/moss-trade-bot-skills/releases/download/v1.0.27-beta/data_cache-v1.0.27.tar.gz",
-  "archive_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-  "files": []
+  "archive_sha256": "d8c19a863946039fd817e0f9496f65316ea90c24808ab8f3df7061b692e7f18d",
+  "files": [
+    {
+      "path": "data_cache/ambush/events.csv",
+      "sha256": "46be7693474a4ac575c5578483314c20eda11a17c19c4813e93da6ffd2ac55b5",
+      "row_count": 217,
+      "last_timestamp": "TRU/USDT"
+    },
+    {
+      "path": "data_cache/ambush/features.csv",
+      "sha256": "d81aa1951c505a0681d95ac1a98d6bea154479fd4ca75ef33a897c129d22fef1",
+      "row_count": 217,
+      "last_timestamp": "TRU/USDT"
+    },
+    {
+      "path": "data_cache/ambush/klines/4.csv",
+      "sha256": "7d33b9688eb011b4ad5145bf82d2b0a3a255407f87c94e8a9e4ae19294deb68c",
+      "row_count": 678,
+      "last_timestamp": "2026-02-03 12:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/ACT.csv",
+      "sha256": "f118342b12f4992470f0d5650bbe49f9e29fd561e025a4a50b308dc57ac2241a",
+      "row_count": 1355,
+      "last_timestamp": "2025-12-24 15:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/AGLD.csv",
+      "sha256": "0a5c2a7df453e4f8babd2dab64b7c79c6554f8fdc9d8fc8b3a72a55150c34dbd",
+      "row_count": 678,
+      "last_timestamp": "2026-03-01 09:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/AIA.csv",
+      "sha256": "964cd0f23e1d0fbf94956fd6c5516216b95d86a4b680338911c96dcef899383d",
+      "row_count": 2032,
+      "last_timestamp": "2026-02-20 16:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/AIO.csv",
+      "sha256": "d2eb2cd0a4ee6592b2ced52d2b94cfbabafa14caa63a66b5387c7442edb5643f",
+      "row_count": 678,
+      "last_timestamp": "2025-09-15 17:30:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/AKE.csv",
+      "sha256": "656526ad19b3defa0c4df0f91fcc324e4781d9368aeaab4bcf8377f9bbdd7de3",
+      "row_count": 1355,
+      "last_timestamp": "2025-12-04 03:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/ALLO.csv",
+      "sha256": "20ae08cda44a2564c0d32db301f8cb7e777324db78d036f90c72609cc5c420ef",
+      "row_count": 1355,
+      "last_timestamp": "2025-12-16 02:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/ALPINE.csv",
+      "sha256": "6039d37de7dc016e049d820bff629105d01ae53489c4c2580a38080b7aa8ee1a",
+      "row_count": 2032,
+      "last_timestamp": "2025-11-11 16:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/ARC.csv",
+      "sha256": "3d38ffb080b9c01eb10dc45ebaa645bf3733b05701fb58ba4cbb7db842d96b34",
+      "row_count": 678,
+      "last_timestamp": "2025-10-25 08:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/ARPA.csv",
+      "sha256": "8abc8e2c4a3443c3d59e543902669c3c0cf70e26e02d97097b34a3aa8b2df591",
+      "row_count": 678,
+      "last_timestamp": "2026-01-26 21:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/ASR.csv",
+      "sha256": "89584f694883eec582d9b2276e76cbdc6056af7c64404ee65cb4041857320ca1",
+      "row_count": 678,
+      "last_timestamp": "2025-09-19 13:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/BANANAS31.csv",
+      "sha256": "3e66638d37f5f05bcbd0bbcb158b143458e34010d7863d0266d2c8b5c42deb66",
+      "row_count": 678,
+      "last_timestamp": "2025-12-01 13:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/BAS.csv",
+      "sha256": "74ef40c6a5986d8a9d4dcfb9b2bc3f0f6854e9ddc386a2381916ae1928fc865d",
+      "row_count": 2032,
+      "last_timestamp": "2025-12-21 15:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/BLESS.csv",
+      "sha256": "bfa722e5bf08700e13521dc16fa4bc35e6fdc56fb5b44b07a5570fa1ee7974c9",
+      "row_count": 678,
+      "last_timestamp": "2026-02-18 16:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/BLUAI.csv",
+      "sha256": "08ef69f0d4f19d61a51a9557a414fb779cea60fda68bd7de3957fff145bbb889",
+      "row_count": 1355,
+      "last_timestamp": "2026-02-24 00:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/BMT.csv",
+      "sha256": "b216d7dbd296c2ef8d97fab07bcf11f4a8819538be64ec54b5de41af93b2cef8",
+      "row_count": 2032,
+      "last_timestamp": "2025-10-15 04:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/BR.csv",
+      "sha256": "fb998f0f2f996d7af9042ea0af1f16053cc3f01be587e54daaa9e85d3ec65eaa",
+      "row_count": 2709,
+      "last_timestamp": "2025-08-30 09:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/BTR.csv",
+      "sha256": "72d8cbe83f0b264cf4747c4079cfd4d43c950c0027277e39484e1563434b0d18",
+      "row_count": 678,
+      "last_timestamp": "2025-09-21 12:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/BULLA.csv",
+      "sha256": "9d560a6ef328071005dc0d07f8fdd9d8a9586567a0916263287a1f088560dfa7",
+      "row_count": 2698,
+      "last_timestamp": "2026-03-02 19:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/D.csv",
+      "sha256": "336e80f7378e583d851732033a7ae14f92443c57249850ebf80121e77c059a08",
+      "row_count": 678,
+      "last_timestamp": "2025-12-30 16:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/DEGO.csv",
+      "sha256": "96c166cd3645229fd8490bae6a355068cd79fd67f3d42df0e9ed28355ddf7a83",
+      "row_count": 678,
+      "last_timestamp": "2025-03-14 09:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/DENT.csv",
+      "sha256": "aa5d683d19f5ed12bd76c04e38f74bff2b706a19576202370fb4592a1b218a0a",
+      "row_count": 441,
+      "last_timestamp": "2026-03-02 23:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/DOLO.csv",
+      "sha256": "79130e0256304695f6ea529bcd92d2ca0acb95e1a54b95a174ea50901a1d9b67",
+      "row_count": 678,
+      "last_timestamp": "2026-01-19 14:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/EDEN.csv",
+      "sha256": "9b1918e5f2abea0d0752c391d3638d5e176269504a2f93e2d0ac9918edd6b9fc",
+      "row_count": 1355,
+      "last_timestamp": "2026-02-22 18:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/ENSO.csv",
+      "sha256": "d4b56b3416989e30ac518862711def0ca481c7d96305a360b41427c30d456931",
+      "row_count": 3367,
+      "last_timestamp": "2026-02-14 00:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/EPIC.csv",
+      "sha256": "79773314f11b26cec3b974265d804b827ba0b8bc813679e5754f4a2905b54a41",
+      "row_count": 678,
+      "last_timestamp": "2025-07-25 20:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/ESP.csv",
+      "sha256": "4858ad1cf5d8cb6e831a56a1a6bf81950709cf912fcb3c2d316afae75bdce1b4",
+      "row_count": 678,
+      "last_timestamp": "2026-02-23 18:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/ESPORTS.csv",
+      "sha256": "ba6826bc3950ac4ba51afe3070795a004534c9b7b3695b633f69f63a1ebcfc2e",
+      "row_count": 678,
+      "last_timestamp": "2025-09-11 08:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/EVAA.csv",
+      "sha256": "0bfd632bea8a3d5ed19d600ff0083ee04136a4c111401105341f4fa17184204c",
+      "row_count": 1355,
+      "last_timestamp": "2025-11-21 03:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/F.csv",
+      "sha256": "8c6b19b028835b1e3f997b9c9d70d098da31d62f8f98001c5e8a5bcd5f7fb4b7",
+      "row_count": 2709,
+      "last_timestamp": "2026-02-09 00:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/FHE.csv",
+      "sha256": "87d1fab0c775f580c5d4d38cdaeb5f72319678405c39030e5c470117ec2ca8c5",
+      "row_count": 6753,
+      "last_timestamp": "2026-02-15 14:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/FIO.csv",
+      "sha256": "4c2d0ee4961528602c776bc490f9ee33298168cfce86bed54b82a4c9fd11eb8c",
+      "row_count": 905,
+      "last_timestamp": "2026-03-02 23:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/FLUX.csv",
+      "sha256": "5d40a7f4e5c6a8b2311c10bdcf827ce90cc3d6c881f61be1c515405593a77f95",
+      "row_count": 678,
+      "last_timestamp": "2025-11-14 16:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/FUN.csv",
+      "sha256": "6dae5a25c68c17f4449a31b1885171ad645e8bb04849da97236ffba2e6112c8f",
+      "row_count": 1355,
+      "last_timestamp": "2025-11-04 04:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/GRIFFAIN.csv",
+      "sha256": "b4ad4cc221ee7809626aabe04e53a173ebf1ad1cf2f26ab27669d84b39ece2c3",
+      "row_count": 517,
+      "last_timestamp": "2026-03-02 23:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/GTC.csv",
+      "sha256": "afe1eb2e36be22ef41d56fe169638e70380ce99a6c56f8b95e9d3aacbef6f1f0",
+      "row_count": 678,
+      "last_timestamp": "2025-08-20 14:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/H.csv",
+      "sha256": "9c90e51fe6f93ed92af3f039788f1d12fafda9005bfa782894ad469fa95dd84a",
+      "row_count": 5369,
+      "last_timestamp": "2025-12-24 21:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/HAEDAL.csv",
+      "sha256": "9dcbf00df18263b399a250af74d109d0c040fa229f53070859a5c750d52a1c4e",
+      "row_count": 2032,
+      "last_timestamp": "2025-06-23 09:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/HEI.csv",
+      "sha256": "88857a43f8f465124a6e3e156ea0857e58c213405310e1bed48dfbfece63d6f5",
+      "row_count": 1355,
+      "last_timestamp": "2025-08-29 14:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/HEMI.csv",
+      "sha256": "374db5aa3d10ca40851edb905d2f96d65dbd8b7519848686ffcfa35721f9f374",
+      "row_count": 2032,
+      "last_timestamp": "2025-12-14 01:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/HIPPO.csv",
+      "sha256": "bf59f379baf52f7a998cf8118ea41604e8360c39cf5e73bb5489f5a92749ca20",
+      "row_count": 4877,
+      "last_timestamp": "2026-03-02 23:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/IN.csv",
+      "sha256": "2f4236e99c251a0afb95cf7764b7ff1fe27f7f6ae492ae09c2011b2088576ad8",
+      "row_count": 678,
+      "last_timestamp": "2025-10-01 08:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/JELLYJELLY.csv",
+      "sha256": "16e283e22dea56d7badc450f4ebd86e272c577dcefa339f9d10a8e3b832631ef",
+      "row_count": 4063,
+      "last_timestamp": "2025-12-08 23:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/KERNEL.csv",
+      "sha256": "a491a3ea9a3724072bf0ff2a2bc8b9e85ff5a7252e8e68c0e6c5ad38ba78e65a",
+      "row_count": 678,
+      "last_timestamp": "2025-11-04 07:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/KOMA.csv",
+      "sha256": "a08b7a30f783385d1633a70c93826aa5ea68ab2596a75b512b1c50119e79cd26",
+      "row_count": 2709,
+      "last_timestamp": "2025-10-25 05:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/LA.csv",
+      "sha256": "b1e06aecfcbbef37d4bff4588ea50f69afe6a19925af9e3d5fb668f960baf488",
+      "row_count": 2032,
+      "last_timestamp": "2026-03-02 00:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/LAB.csv",
+      "sha256": "345dbfc49af29792da3f306c354f4568e8d5933d1e2b36d5202d41f830b8a9e4",
+      "row_count": 1355,
+      "last_timestamp": "2025-11-14 12:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/M.csv",
+      "sha256": "e797dd328f9e0807c3c9fd75c1b9ee55b6ff0f93e512fe8e446d6432a1d18e6b",
+      "row_count": 2032,
+      "last_timestamp": "2025-08-31 13:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/MAGIC.csv",
+      "sha256": "63e38d38d150966ff3f24fea67c8aa7c5394ed371e427c7c4621939c655ccf1c",
+      "row_count": 678,
+      "last_timestamp": "2025-04-26 16:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/MEME.csv",
+      "sha256": "416d14e7cc4defbe41026fb4f02618884b7dcc5143963d4e3f2b5fb886c33cda",
+      "row_count": 1355,
+      "last_timestamp": "2025-08-07 15:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/MLN.csv",
+      "sha256": "895494a8dab84ae236cdf7d125b22e3eef512d08c48757354b2deb52690ddc19",
+      "row_count": 1355,
+      "last_timestamp": "2025-12-05 20:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/MUBARAK.csv",
+      "sha256": "4aa8135b104b9c30aa73c3afe2602e216f544a9d6369346f65ac6c9741fbbeb1",
+      "row_count": 2709,
+      "last_timestamp": "2025-09-24 02:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/MYX.csv",
+      "sha256": "3ec96d30fcdc3f75dcf80003e397d24cba884db50e0795264a69767d07a5c5b5",
+      "row_count": 2032,
+      "last_timestamp": "2025-08-10 20:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/NAORIS.csv",
+      "sha256": "71b6de3c84fa586e0c8de8f7f8aa7ce8c51889d6cf67abaaf5a96febc2e2259b",
+      "row_count": 1355,
+      "last_timestamp": "2026-01-27 23:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/NOM.csv",
+      "sha256": "1e33b982ff18f134c281d0e936dada209a1ccb1b3574579f4e66df2657c8046f",
+      "row_count": 678,
+      "last_timestamp": "2026-02-01 00:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/OL.csv",
+      "sha256": "d47d73f6f9af21101bc3b730def4a57047379516bd3587ecca6e7334378e1216",
+      "row_count": 678,
+      "last_timestamp": "2025-11-05 09:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/PARTI.csv",
+      "sha256": "2d9ad90306e0c907d761a974596824e6307719e0935376d9795330c97436f063",
+      "row_count": 2709,
+      "last_timestamp": "2026-02-12 13:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/PIPPIN.csv",
+      "sha256": "e5f6886a0ca93a2fa4011605abb1ca92be7a2a4286be89666b40f72f46859fb3",
+      "row_count": 2709,
+      "last_timestamp": "2025-11-29 21:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/PIXEL.csv",
+      "sha256": "3a4ea677662833f40945add22260c78ddfe877bc5b4a013b9029b76e9a6bc8de",
+      "row_count": 1355,
+      "last_timestamp": "2025-11-28 00:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/PNUT.csv",
+      "sha256": "54b80e20fdc5db9e9d428920fe8d8f024bb4cd1c84acbd7f1dc2812a1e104a0b",
+      "row_count": 1355,
+      "last_timestamp": "2025-05-15 16:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/PROMPT.csv",
+      "sha256": "417a68ee922f5ba5cad68060fa5ead3e6197e09f876efcbec36ed60eef254841",
+      "row_count": 678,
+      "last_timestamp": "2025-12-19 22:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/PTB.csv",
+      "sha256": "a483c79272ff75237445ac49221596a190ee5d61b675acb1c7e67ee7ba3846fc",
+      "row_count": 2709,
+      "last_timestamp": "2026-02-14 12:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/Q.csv",
+      "sha256": "69099e3834b4d72c3530de9c8ba64ea8c283fee0757c3c0bff2ea0539f1dc7d3",
+      "row_count": 2028,
+      "last_timestamp": "2025-10-13 15:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/RESOLV.csv",
+      "sha256": "e3db253e6d5867355b93c5356e29f9edeeabef89250599d43471051bebf21434",
+      "row_count": 678,
+      "last_timestamp": "2025-11-13 08:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/SAPIEN.csv",
+      "sha256": "eb7b1ad4a525901a6a871a486e028c0804c81d5a349482b193603878c1ea5db4",
+      "row_count": 678,
+      "last_timestamp": "2025-12-10 14:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/SHELL.csv",
+      "sha256": "4559dbc22ff4cb0ed8a161a65af1b77dbdba6b4ba17b2c511d04aaa7c428b0b8",
+      "row_count": 678,
+      "last_timestamp": "2025-04-23 05:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/SKYAI.csv",
+      "sha256": "8dedcbbe61aa0e7d738cd664e233f20934e49a8a31261821d114f31842fb81db",
+      "row_count": 2709,
+      "last_timestamp": "2026-01-26 06:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/SOLV.csv",
+      "sha256": "f45966ffbf3d4741bf99143ff4ebf7d98fdae77a5a52cccb14327ad2329c3f9b",
+      "row_count": 1355,
+      "last_timestamp": "2025-11-25 10:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/STO.csv",
+      "sha256": "f0653d75ee3dd20e6fa8ed2130cabe38c4e8816dea22054945ac5d7d906e8cb0",
+      "row_count": 3386,
+      "last_timestamp": "2026-01-24 19:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/STORJ.csv",
+      "sha256": "3108777af0650e73449edb1a635d493baab7746fde86f6070813b4f176864223",
+      "row_count": 678,
+      "last_timestamp": "2026-01-12 12:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/SUPER.csv",
+      "sha256": "db77ca8d462e730fed6ad0ae5432f490403cf8181ebda9a673a73bf3a64e761c",
+      "row_count": 2709,
+      "last_timestamp": "2025-12-04 11:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/SWARMS.csv",
+      "sha256": "6d2115c2c75cddeaf0f00674845bea8bd97be574ceabe1aa919e7533de62033e",
+      "row_count": 1355,
+      "last_timestamp": "2025-12-22 17:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/TA.csv",
+      "sha256": "33053e8d5709de7bcda6de9e52fc854236eabb283ce09c245fb05b0b04f4fa6c",
+      "row_count": 6767,
+      "last_timestamp": "2026-01-15 11:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/TAC.csv",
+      "sha256": "a0cc698ca58569e50c9288f2e471d7b7c38c795539891e855b35d3a2bcf7ab9f",
+      "row_count": 678,
+      "last_timestamp": "2025-12-03 13:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/TAKE.csv",
+      "sha256": "fb20c982f032ae6049caebfec9562c2dfd0997b672c984575fa5f6f599f4080f",
+      "row_count": 678,
+      "last_timestamp": "2026-02-19 01:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/TNSR.csv",
+      "sha256": "fc9cbe0f6f0c3aa2339838a3897d127e5fbd56cdb557236c6d6c9e3408cef58a",
+      "row_count": 678,
+      "last_timestamp": "2025-11-26 12:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/TRADOOR.csv",
+      "sha256": "6df5e44a1f7d51287c4abc9b7eed7e8adc20ea3b1ac3dec36c2324de40e88c46",
+      "row_count": 2032,
+      "last_timestamp": "2026-01-06 14:15:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/TRU.csv",
+      "sha256": "16b1c71fc8013bfcd4a7d3f7d703defb091d7fe0d94634a8ffee4804679e478f",
+      "row_count": 35,
+      "last_timestamp": "2026-03-02 23:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/TST.csv",
+      "sha256": "a0d7f130eb11a9e5287fbc453f502f780d2931b543d5c0c911b0f5164408ed74",
+      "row_count": 2670,
+      "last_timestamp": "2025-11-12 07:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/TUT.csv",
+      "sha256": "2a92f5128a47cae2ce24bb4c91d846efee86eb807732a1ae4c6e1dfa2c8406f6",
+      "row_count": 1355,
+      "last_timestamp": "2025-05-02 07:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/VIC.csv",
+      "sha256": "90bee77db1ffe4e7d5800bd060149b16f52ab84c11924096e9f97c6da043c590",
+      "row_count": 2032,
+      "last_timestamp": "2026-02-22 18:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/VINE.csv",
+      "sha256": "da56686bb124e204c43c8dbb7e3a45b44bed5c2e2ba2922499ba17ae1839dec3",
+      "row_count": 1355,
+      "last_timestamp": "2025-05-09 16:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/XNY.csv",
+      "sha256": "4a73e4333fc56207f415a5b58d78ab7bb6cdfc7c4097c5e1e1a2a224de9edfb7",
+      "row_count": 1355,
+      "last_timestamp": "2025-12-11 17:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/XPIN.csv",
+      "sha256": "60c114ae8aa1f30b0e7aebee6b159b01fa883553b2f5d9fe4d67f768f87446a8",
+      "row_count": 1355,
+      "last_timestamp": "2025-10-23 23:30:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/ZBT.csv",
+      "sha256": "6811d42f21bf0e30dcce44d953cfe2ed726755ff8a168e1e769adb65725cb176",
+      "row_count": 1355,
+      "last_timestamp": "2026-01-22 10:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/ZEREBRO.csv",
+      "sha256": "a25bed39592cf63e579567cb0d6e4c02bd5a813a8d60cbdaaa6f2af2edeb24f8",
+      "row_count": 2709,
+      "last_timestamp": "2025-11-22 12:00:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/klines/ZKP.csv",
+      "sha256": "23c3df7676f97391de77c392d80006f063cd3d1ea84c799ad872fb0b86953775",
+      "row_count": 2032,
+      "last_timestamp": "2026-02-08 00:45:00+00:00"
+    },
+    {
+      "path": "data_cache/ambush/market_cap_snapshot.json",
+      "sha256": "45217109675329751eb04c95448d42ee374f5ace6eeb187f62ed2a0cb2865aaa",
+      "row_count": null,
+      "last_timestamp": null
+    },
+    {
+      "path": "data_cache/ambush/sanity_events.json",
+      "sha256": "ba0b47b9165210b2fc1f2e757ad9a30915792d2a3cd73e63859e6400f2cb2ca1",
+      "row_count": null,
+      "last_timestamp": null
+    },
+    {
+      "path": "data_cache/ambush/supply.json",
+      "sha256": "467d915dcacc6ddbd5eeb00cd6ddb713baa196207e892226a14efe594b93ab88",
+      "row_count": null,
+      "last_timestamp": null
+    },
+    {
+      "path": "data_cache/hyperliquid_ADAUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "48e277e85788290cf5cfaa853dcd7e362da3d9fdf92b738406a0e011f1eaf0d2",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_AMDUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "23194e7acdece3e9575deaca2fd7baa3d978f8f6861fd04096cf4f3acf8a934f",
+      "row_count": 8489,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_APTUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "08cc7accbe2b876a8d436db400f6d10f77313005875035fec41cecc57834407a",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_ARBUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "a42a0ad11b48c33bccf81dd8559f57153abd6e2637587f5af40bb579506b9f14",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_ATOMUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "7d5f6811384b75c8fe29716bfbe29cea5c7dc72f8c626168aaf156bc729f6d14",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_AVAXUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "3498f03d7a437629f95b8c160cbc3939ce1bf4ed0cdb11c2ab612a8755c9d7a5",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_BCHUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "30f02cea76f32f663edb4b927613cf7cb90ed5565f34de47ba5240e09ff424c8",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_BNBUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "fce72268627a33d3f6f5ff2726edba1e63f35e98a62ce9d1fbbd86493fd5affe",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_BRENTOILUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "a1ac718afb3b6a7061b01d41af814bd31e71bf333f7c4e6f63b71b0b450a071f",
+      "row_count": 5004,
+      "last_timestamp": "2026-05-18 09:00:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_BTCUSDC_15m_2025-07-01_304d.csv",
+      "sha256": "74ce5115b480ce4a5da16b3ff1f9821da34ad8e317de98b1d4a2caceccc17919",
+      "row_count": 29185,
+      "last_timestamp": "2026-04-30 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_CBRSUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "f1d972bdbb29332dc07fb49fcfe428cbfb3125d2b3d7c117c3937cd56a2cef59",
+      "row_count": 1664,
+      "last_timestamp": "2026-05-18 09:00:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_CLUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "4417fcc9fb03d1c72b9a67b392a8970ef8915fe7ae711d72d1e91f3ad5d70e6d",
+      "row_count": 5321,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_COINUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "5c35725cd98ec68ab53db2823cc9b55ef292952144f953eea912f84aa7e93271",
+      "row_count": 9343,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_CRCLUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "a6cfe9e474e307c1e49ee13660c1281634343b4fe9d6b46967a5761d18a95de5",
+      "row_count": 7429,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_DOGEUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "7b4b388ea338ac9bcd9dd6a6c32b4acfecc0df786da9d90e9f51edf814a20cfb",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_DOTUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "71a031e861e41a50be5dc663b786d3c7e72239969827bc386deb3aea3d29339b",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_ETHUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "e47d4a4e73456e6e66745a555fe61c2a2e01847068be303cde49c37e690fa839",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_FILUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "d49c870149246f62888849700457da626947ab3120a073a643f8488045c0754e",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_GOLDUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "eee7ea4a555015166dd6f5b821b3d76087676b90612bf95edb0ee51765773e50",
+      "row_count": 6761,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_GOOGLUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "b168d1c15fbb91f0751bc30bb5e10847893cc28136f8789479fcdb2c1429ab29",
+      "row_count": 10018,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_HBARUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "4a3f5bcc68e5964494fb3926ea54d2c828168ec33bd725f7a24d6077564469ae",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_HYPEUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "a7af6fd72c9ada8b29a8d0960fb90018cbef9a0ff49784091d9a3ad5557e0e00",
+      "row_count": 14210,
+      "last_timestamp": "2026-03-03 00:00:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_INTCUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "8b64b1e9ddad6cd4c4382d9619bb2fcc1f7688edf178531e6dcd9612067f5178",
+      "row_count": 8585,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_LINKUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "0df5bdc129c3e71c422b598530ab09264f93c10eb67770ddbcec47b172025336",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_LTCUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "53c1c5ab56d38ad57ccafa226da808cb77bbbb8671a8b9489823cd1dfc358ba4",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_METAUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "aae8a8ebde6cc4dfe8376fa8d700b7ecdbc633cb92547e8df75296f2cc70e66e",
+      "row_count": 9833,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_MSTRUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "cc337aba3ed0280ee8acdb61152866b4a28c4a6bdb0b16ff928fb5aedecc546b",
+      "row_count": 8679,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_MUUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "dbafba9a208b8fe37354c0a5e3938d31350b45146ae29a6540c86e922fdeeeef",
+      "row_count": 7041,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_NEARUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "f7526c876e18e64e3c0107093abbfb30b35d079378c7f67776401d851f1dcecc",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_NVDAUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "119d93c03345b43ff61aedef8594047c166fccd96a6ef759bcf22a98fa4b624b",
+      "row_count": 10579,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_OPUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "08b061594df956a2f438beb2443e30578d1ce233fbc11f797a740b583eb6372c",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_ORCLUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "5232dd26c105558eb1e2aa739eb86a697f454e8d9aa316c16046a27ecff30ce0",
+      "row_count": 8393,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_SILVERUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "c05847d97f4095228e0b740f9d3a724332d4b72b754b13a51a877a718c41519c",
+      "row_count": 6435,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_SKHXUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "3543e652bf9f55e3f0cf9f6864d2894cac3823726874afdb1b9cf8b7ffa00392",
+      "row_count": 1062,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_SNDKUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "baf10541c42d874c4d2bb25457eb1310c6914fd57c8011aeb73bd8f4e72794a5",
+      "row_count": 4745,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_SOLUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "1e8cbc52ffa239e418d8700c6d2d3baf8a0e9c460b991e39fd9f89d76bed0123",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_SP500USDC_15m_2025-10-06_148d.csv",
+      "sha256": "9a3e01c06e82ef7bc4b86bcda4c891f6346fe54abb0b36135a09e42f862f5ab8",
+      "row_count": 5003,
+      "last_timestamp": "2026-05-18 09:00:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_SUIUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "27acda743e032a549b3d476d2f58cce6c98d22b7d0226b989373827915d5f31b",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_TRXUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "50521370e2719c07c42a2dcc3a6b24a44eda9290da61fc0a29c5f7bf5747d35c",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_TSLAUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "db7522f9ab181944bf0041baf661aaf96816c125ffef7bd5f70f6b648c2c6e05",
+      "row_count": 10505,
+      "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_UNIUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "5122cef0f877662a07dd329348dd9062c14ec877e3224d9a72d93152fb640725",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_XRPUSDC_15m_2025-10-06_148d.csv",
+      "sha256": "192808913bc73e18aee3af475b6d97cfc2619d9136732166a795764e7bb18a64",
+      "row_count": 14209,
+      "last_timestamp": "2026-03-02 23:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_XYZ100USDC_15m_2025-10-06_148d.csv",
+      "sha256": "4bcacf9c55a1fe172f124c57f05f0b5512e6af37c44612dbac60edce90cd8833",
+      "row_count": 13490,
+      "last_timestamp": "2026-03-03 00:15:00"
+    }
+  ]
 }

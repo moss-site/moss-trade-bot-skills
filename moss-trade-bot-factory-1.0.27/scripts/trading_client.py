@@ -376,6 +376,38 @@ class TradingClient:
             body["strategy"]["ambush_params"] = _ambush_params_for_wire(ambush_params)
         return self._request("POST", "/agent/realtime/bots", body)
 
+    def post_ambush_decision(
+        self,
+        event_id: int,
+        decision: str,
+        reason: str,
+        *,
+        momentum_passed: bool = False,
+        source_order_id: str = "",
+    ) -> dict:
+        """Write a decision audit row back to the server.
+
+        Idempotent — same (event_id, bot_id) upserts. Used by
+        ``ambush.event_handler`` after every ``record_decision()`` call so the
+        server has the complete per-event per-bot trail
+        (``ambush_event_decision`` table).
+
+        Best-effort by design: callers should NOT raise on failure. Local
+        SQLite is the authoritative store. The server row is for cross-host
+        audit + UI + compliance only.
+
+        Path: ``POST /agent/realtime/bots/{bot_id}/ambush-events/{event_id}/decision``
+        Backend handler: ``internal/api/ambush_event_decision.go:postAmbushEventDecisionV2``
+        """
+        body = {
+            "decision":        str(decision),
+            "reason":          str(reason),
+            "momentum_passed": bool(momentum_passed),
+            "source_order_id": str(source_order_id or ""),
+        }
+        path = f"/agent/realtime/bots/{self.bot_id}/ambush-events/{int(event_id)}/decision"
+        return self._request("POST", path, body=body)
+
     def unbind(self, bot_id: str, user_uuid: str) -> dict:
         """Remove one realtime bot (does not revoke binding). Path id = realtime bot id."""
         return self._request("DELETE", f"/trader/realtime/bots/{bot_id}",

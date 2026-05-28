@@ -368,17 +368,18 @@ python3 {baseDir}/scripts/ambush/upload.py \
 | ------- | ----------------------------- |
 | 状态     | ✅ Verified                    |
 | 匹配     | ✅ Match (本地 vs 平台完全一致) |
-| Verify ID | <返回的 bot_id UUID>          |
+| Agent ID | <返回的 agent_id, agt_<32hex>> |
 ```
 
-⚠️ **不要把这个 UUID 标成 "Bot ID"**。它是 `agent_trade_backtest_bots` 表的回测档案
-PK,不是可交易的实盘 bot。实盘 bot ID 是 `agt_<32hex>` 格式,只有 Step 4
-create-realtime-bot 才会返回。这里返回的 UUID **只能用于**:
-- 查 leaderboard 上的这条记录
-- `GET /backtest/bots/<uuid>` 看完整回测详情
+⚠️ **显示规则**:server 返回的 `VerifyResponse` 同时有 `bot_id` (UUID 格式,
+`agent_trade_backtest_bots` PK) 和 `agent_id` (`agt_<32hex>`,`agent_trade_agents`
+PK)。**优先显示 `agent_id`** —— 这是 canonical ID,跟 realtime bot 同一格式,
+leaderboard / 详情页 / 后续 API 调用都用它。**不要显示 `bot_id` 那个 UUID**,
+对用户没意义,容易混淆。
 
-server response 字段名虽然叫 `bot_id`,但**对用户展示时一律叫 "Verify ID"**,
-避免误导成"我已经有可下单的 bot 了"。
+⚠️ **注意 mode**:这里返回的 agent_id 的 `mode='backtest'` —— 是已验证的回测档案,
+**不是实盘 bot**。要实盘交易这个策略,需要 Step 4 单独 create-realtime-bot,
+那个返回的也是 `agt_*` 格式但 `mode='realtime'`。两者用 ID 区分不出,要看 mode。
 
 如果 `fingerprint mismatch`：说明 skill 和 server 对同一份 (params, dataset) 算出不同结果，**算法层面 drift**。这种情况停下来报告，不要继续到 Step 4。原因通常是：
 - skill 端 `chained_harness.py` 或 `backtest.py::_apply_trade_costs` 跟 server 端 Go 实现不同步
@@ -387,7 +388,7 @@ server response 字段名虽然叫 `bot_id`,但**对用户展示时一律叫 "Ve
 
 verify 通过后，**只展示结果，停下等用户**。不要自动走 Step 4 create-bot — 用户选「仅 verify」就是想先看对账结果再决定，不是想一步建实盘。
 
-展示完 verify 结果(状态 / 匹配 / **Verify ID**),再给用户一组 **新菜单**：
+展示完 verify 结果(状态 / 匹配 / **Agent ID**),再给用户一组 **新菜单**：
 
 1. **创建实盘 bot** → 走 Ambush Step 4（用同一份 `/tmp/ambush_params.json`，无需再 propose / backtest / verify）
 2. **重跑 verify**（如果对结果不放心）→ 再来一次 Step 3.5

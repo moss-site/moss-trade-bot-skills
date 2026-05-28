@@ -26,6 +26,59 @@ DEFAULT_HEADERS = {
 }
 
 
+def _ambush_params_for_wire(p: dict) -> dict:
+    """Convert ambush params (Python numbers) into the V2 HTTP wire format
+    that the Go server expects: decimal fields encoded as strings, ints kept
+    as ints.
+
+    See `internal/api/router.go` ambushBotParamsReq for the schema. Field
+    layout matches `domain.AmbushBotParams` 1:1; the only conversion is
+    "ratio fields → string" so JSON parsers don't lose precision.
+
+    NOTE: trigger thresholds (oi_mc, z_score, surge_15m) live in a global
+    server-side config (`AmbushOIMCThreshold` / `AmbushZScoreThreshold` /
+    `AmbushSurge15mThreshold`). The skill no longer sends a `trigger`
+    block — server ignores per-bot thresholds and applies the
+    deployment-wide values.
+    """
+    def _s(v):
+        # Render decimals as fixed strings (no scientific notation for
+        # small values like 0.05). Values are bounded in [0.01, 1.0].
+        if isinstance(v, str):
+            return v
+        return format(float(v), "f").rstrip("0").rstrip(".") or "0"
+
+    long = p.get("long_params", {}) or {}
+    short = p.get("short_params", {}) or {}
+    rhythm = p.get("rhythm", {}) or {}
+
+    return {
+        "direction": p.get("direction", "balanced"),
+        "long_params": {
+            "leverage":       int(long.get("leverage", 0)),
+            "position_pct":   _s(long.get("position_pct", 0)),
+            "stop_loss_pct":  _s(long.get("stop_loss_pct", 0)),
+            "trailing_pct":   _s(long.get("trailing_pct", 0)),
+            "max_hold_hours": int(long.get("max_hold_hours", 0)),
+            "momentum_bars":  int(long.get("momentum_bars", 0)),
+            "cooldown_bars":  int(long.get("cooldown_bars", 0)),
+        },
+        "short_params": {
+            "leverage":         int(short.get("leverage", 0)),
+            "position_pct":     _s(short.get("position_pct", 0)),
+            "stop_loss_pct":    _s(short.get("stop_loss_pct", 0)),
+            "trailing_pct":     _s(short.get("trailing_pct", 0)),
+            "max_hold_hours":   int(short.get("max_hold_hours", 0)),
+            "cooldown_bars":    int(short.get("cooldown_bars", 0)),
+            "entry_delay_bars": int(short.get("entry_delay_bars", 0)),
+        },
+        "rhythm": {
+            "max_trades_per_event": int(rhythm.get("max_trades_per_event", 1)),
+            "same_coin_dedup_days": int(rhythm.get("same_coin_dedup_days", 7)),
+        },
+    }
+
+
 class TradingClient:
     def __init__(self, api_key: str = "", api_secret: str = "",
                  base_url: str = "", bot_id: str = "", symbol: str = "BTCUSDC"):
@@ -281,8 +334,20 @@ class TradingClient:
         exchange: str = "",
         lookback_bars: int = 0,
         schedule_interval_minutes: int = 0,
+        strategy_type: str = "",
+        ambush_params: dict = None,
     ) -> dict:
-        """Create a realtime bot under current binding. Requires prior bind (api_key/api_secret)."""
+        """Create a realtime bot under current binding. Requires prior bind (api_key/api_secret).
+
+        Ambush mode: pass ``strategy_type="ambush"`` + ``ambush_params={...}``.
+        The server accepts the V2 wire format where decimal fields are JSON
+        strings (per CLAUDE.md "v2 wire format: decimal fields are JSON
+        strings"). The skill side typically computes ``ambush_params`` from
+        ``propose.py`` and just forwards.
+
+        Majors mode: leave ``strategy_type`` empty (or ``"majors"``);
+        ``strategy_params`` is the legacy DecisionParams.
+        """
         display_name_i18n = validate_bilingual_text("display_name_i18n", display_name_i18n or {}, 64)
         persona_i18n = validate_bilingual_text("persona_i18n", persona_i18n or {}, 64)
         description_i18n = validate_bilingual_text("description_i18n", description_i18n or {}, 280)
@@ -305,6 +370,10 @@ class TradingClient:
             body["strategy"]["lookback_bars"] = lookback_bars
         if schedule_interval_minutes:
             body["strategy"]["schedule_interval_minutes"] = schedule_interval_minutes
+        if strategy_type:
+            body["strategy"]["strategy_type"] = strategy_type
+        if ambush_params is not None:
+            body["strategy"]["ambush_params"] = _ambush_params_for_wire(ambush_params)
         return self._request("POST", "/agent/realtime/bots", body)
 
     def unbind(self, bot_id: str, user_uuid: str) -> dict:

@@ -1,0 +1,9 @@
+{
+  "version": "1.0.27-beta",
+  "repo": "moss-site/moss-trade-bot-skills",
+  "tag": "v1.0.27-beta",
+  "asset_name": "data_cache-v1.0.27.tar.gz",
+  "asset_url": "https://github.com/moss-site/moss-trade-bot-skills/releases/download/v1.0.27-beta/data_cache-v1.0.27.tar.gz",
+  "archive_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "files": []
+}

@@ -347,12 +347,22 @@ python3 {baseDir}/scripts/ambush/upload.py \
   --ambush-verify
 ```
 
-> ⚠️ 这 6 个文案参数是为了让 backtest agent 在列表/leaderboard 上有人看得懂的名字 +
-> 描述（否则会显示 "Agent agt_xxx" + "暂无描述"，因为 server 端 backtest agent
-> 文案就从 verify-job payload 的 `bot.name_i18n` / `personality_i18n` /
-> `description_i18n` 来）。从 propose 阶段已经知道用户的策略风格了，按 Step 1
-> 推断的 (direction, aggressiveness) 生成自然中文名，**不要让用户重复输入**。
-> 缺省也行，upload.py 会兜底用 "Ambush 异动币回测"，但显然不如 LLM 生成的好看。
+> ⚠️ **这 6 个文案参数全部必传,不要省略,也不要用占位符 `<...>` 字面值**。
+> 你已经从 propose 阶段知道用户的 (direction, aggressiveness, 风格)，按那个生成
+> 真实的中文 + 英文文案,例如:
+>
+> - direction=balanced + aggressiveness=default →
+>   `--display-name "稳健双向异动 v1"` `--display-name-en "Steady ambush v1"`
+>   `--persona "稳健双向,严格止损,只抓高质量异动信号"`
+>   `--persona-en "Two-way ambush, tight stop-loss, only high-quality signals"`
+>   `--description "balanced direction、leverage 3x、position_pct 20%、stop_loss 8%、max_hold 30h..."`(根据 propose 出的实际参数填)
+>
+> 不要让用户重复输入这 6 个值,LLM 自己合成。**不要省略走兜底**——兜底名
+> `"Ambush 异动币回测"` 会让 leaderboard 上多个 verify 看起来一模一样,
+> 用户分不清哪个对应哪组参数。
+>
+> 落字段位置:server 把 `display_name` → `name_i18n.zh`、`display_name_en` → `name_i18n.en`、
+> `persona` → `personality_i18n.zh` 等等,backtest agent 列表/leaderboard/详情页全用这些。
 
 输出要点：
 - `fingerprint match`：skill 本地链式回测和 server 重算结果**完全一致**（params + initial_capital + harness_version + dataset_sha256 的 SHA-256 哈希相同）

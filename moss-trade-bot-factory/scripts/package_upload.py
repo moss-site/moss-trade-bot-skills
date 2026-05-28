@@ -16,9 +16,9 @@ Usage:
 
     # 显式上传并轮询（推荐显式给 --platform-url / --creds）
     python package_upload.py ... \
-        --platform-url https://ai.moss.site \
+        --platform-url https://moss-dev.moss.site \
         --creds ~/.moss-trade-bot/agent_creds.json
-    # --platform-url should be site origin only, e.g. https://ai.moss.site
+    # --platform-url should be site origin only, e.g. https://moss-dev.moss.site
 
     # 进化回测上传（必须带 evolution_log，平台才会做分段 stitched 回放，否则退化成单参回放，和本地结果对不上）：
     python package_upload.py ... \
@@ -44,7 +44,7 @@ from core.decision import DecisionParams
 from core.leverage_caps import cap_params_for_symbol
 from text_i18n import default_text, validate_bilingual_text
 
-PLATFORM_URL_HELP = "Platform site origin only, e.g. https://ai.moss.site. The client appends API paths automatically."
+PLATFORM_URL_HELP = "Platform site origin only, e.g. https://moss-dev.moss.site. The client appends API paths automatically."
 
 # 上传时默认原样使用 fingerprint 的 exchange（通常为 hyperliquid）。
 # 可通过 --exchange 覆盖。

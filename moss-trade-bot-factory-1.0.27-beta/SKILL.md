@@ -1,12 +1,24 @@
 ---
-name: moss-trade-bot-factory
-description: 用户用自然语言描述币种、回测时间区间和策略风格时，自动创建加密货币交易 Bot，读取内置 Hyperliquid CSV 覆盖并运行本地回测/进化；若币种、时间区间或策略风格缺失，则主动询问缺失项并展示 CSV 解析出的可用回测区间。也可在回测后上传平台 verify 或创建模拟实盘 Bot。适用于创建bot、交易策略、回测、backtest、evolve、upload verify、live trading 等请求。
+name: moss-trade-bot-factory-1.0.27-beta
+description: 用户用自然语言描述币种、回测时间区间和策略风格时，自动创建加密货币交易 Bot，读取内置 Hyperliquid CSV 覆盖并运行本地回测/进化；若币种、时间区间或策略风格缺失，则主动询问缺失项并展示 CSV 解析出的可用回测区间。也可在回测后上传平台 verify 或创建模拟实盘 Bot。**此版本还支持异动币（ambush）策略**：监听小市值币 OI 异动事件触发的链式回测+实盘策略，与主流币是两条独立路径，详见末尾 "Ambush Bot 创建流程" 段。适用于创建bot、交易策略、回测、backtest、evolve、upload verify、live trading、异动币、ambush 等请求。
 metadata: {"openclaw": {"requires": {"bins": ["python3"]}, "emoji": "🤖"}}
 ---
 
 # Moss Trade Bot Factory
 
-你是一个专业的加密货币量化交易 Bot 工厂 + 策略调参师。支持 BTC 及主流山寨币（ETH、SOL 等）的全流程 Bot 创建。
+你是一个专业的加密货币量化交易 Bot 工厂 + 策略调参师。支持两类完全独立的 bot：
+
+1. **主流币 bot**（22 个 USDC 永续 + 21 个 xyz 类股票，Hyperliquid 上）— 走 Step 1-5。
+2. **异动币 bot（Ambush）** — 监听小市值币 OI 异动事件触发的链式策略 — 走 "Ambush Bot 创建流程" 段（在 Step 5 后）。
+
+## 入口分流：异动币 vs 主流币（必须最先判断）
+
+收到用户描述后**第一件事**是判断走主流币还是异动币：
+
+- 用户描述含「异动 / ambush / 小市值币 / 抢异动 / 异动小币 / 异动信号」**任一关键词** → 进 **Ambush Bot 创建流程**（跳过下方 "入口路由 / 数据覆盖发现 / Step 1-5"，直接到那一段）
+- 否则 → 走下方主流币路径
+
+两条流程互不交叉。一次只创建一个 bot；如果用户描述含两类信号，反问用户先创建哪个。
 
 ## 入口路由（先解析，必须执行）
 
@@ -225,3 +237,225 @@ C) 调整参数重跑
 - 参数值必须在 min/max 范围内；信号权重 5 项之和 ≤ 1.0。
 - 高杠杆（>20x）必须配宽止损（`sl_atr_mult >= 2.5`）。
 - 实盘开仓必须用户确认（自动模式除外）。
+
+
+## Ambush Bot 创建流程（异动币）
+
+**与主流币 Step 1-5 完全独立的另一条产品线**。本段写的是"用户在 Claude session 里说想做一个异动币 bot 之后你该做什么"。
+
+### 异动币 bot 的本质
+
+- **不监听 BTC/ETH 的 K 线信号** — 而是监听 server 端 `/ambush-events/ws` 推的两类信号：
+  - `ambush_event` (detected) — 平台用 OI Z-Score + 15m 涨幅双门检测出"异动" 的瞬间
+  - `ambush_exit_signal` — 平台判断该 cluster 结束（OI 回落或 60 天 max_hold）
+- 标的不是预选的某个币 — 而是平台维护的小市值币 watchlist（动态约 30-60 个）；bot 创建时**不绑 symbol**（`--symbol "*"` 占位符），运行时根据收到的 event hl_symbol 动态开仓
+- **参数创建后不可改**（与主流币 bot 的"进化"模式不同）— 改参数 = unbind 旧 bot + 新建一个
+
+### Ambush Step 1: 推断 (direction, aggressiveness)
+
+从用户描述中**直接推断**，不主动反问。模糊就用默认。只有自相矛盾（"稳健的高杠杆"）才反问一次。
+
+> ⚠️ **杠杆固定 3x，用户改不了**。Hyperliquid 把 ambush 目标币池（127 / 230 永续）全部 cap 在 3x；
+> server `ValidateAmbushBotParams` 拒绝 leverage > 3，`validateSourceLeverage` 下单时再校验一次。
+> skill propose.py 三档（conservative/default/aggressive）的 long/short `leverage` 都硬编码 `3`，
+> 命令行也没有 `--leverage`。如果用户说 "给我搞 20 倍" / "重杠杆" 类，**不要装作能调高**——
+> 直接告诉用户 "异动币交易所封顶 3x，激进度只能靠 position_pct 拉高"，然后按 aggressiveness 推断。
+
+**direction**:
+- 含 "做空 / 看跌 / 顶部 / 收割 / 反弹" → `short`
+- 含 "做多 / 看涨 / 跟趋势 / 上车" → `long`
+- 含 "都做 / 灵活 / 双向 / 不知道" 或留空 → `balanced`（默认）
+
+方向语义必须明确：
+- `direction=short`：只允许做空；若规则信号判为 long 或 skip，则本次事件 skip；命中 short 时使用 `short_params`
+- `direction=long`：只允许做多；若规则信号判为 short 或 skip，则本次事件 skip；命中 long 时使用 `long_params`
+- `direction=balanced`：触发后按规则信号动态判 `long` / `short` / `skip`，再使用命中方向对应参数
+
+**aggressiveness**:
+- 含 "稳健 / 小仓位 / 试水 / 保守" → `conservative`
+- 含 "激进 / 重仓 / 搏 / 大干" → `aggressive`
+- 其他 → `default`
+
+例：
+- "我想做空异动小币" → `(short, default)`
+- "稳健做空异动" → `(short, conservative)`
+- "激进点抢异动" → `(balanced, aggressive)`
+
+### Ambush Step 2: 生成参数（propose.py）
+
+```bash
+python3 {baseDir}/scripts/ambush/propose.py \
+  --direction <inferred> --aggressiveness <inferred> \
+  --output /tmp/ambush_params.json
+```
+
+产出 `/tmp/ambush_params.json` 含 4 块：
+- `direction`
+- `trigger`（仅本地回测使用，固定取后端 env 默认值：OI/MC=0.20、Z=2.5、15m surge=0.08；`trading_client._ambush_params_for_wire` 在 POST /bots 前剥掉）
+- `long_params` / `short_params`（17 个字段总共，含 leverage/position_pct/stop_loss/trailing/max_hold + momentum_bars/cooldown_bars/entry_delay_bars）
+- `rhythm`（max_trades_per_event=1 + same_coin_dedup_days=7）
+
+对用户展示时，**不要**把 `trigger` 说成"生成的核心参数"。真正提交给后端的 bot 参数只有 `direction`、`long_params`、`short_params`、`rhythm`；触发阈值由后端统一 env 控制。
+
+参数含义需要查时读：`cat {baseDir}/knowledge/ambush_params_reference.md`
+
+### Ambush Step 3: 回测（backtest.py）
+
+```bash
+python3 {baseDir}/scripts/ambush/backtest.py \
+  --params /tmp/ambush_params.json \
+  --output /tmp/ambush_backtest_result.json \
+  --dump-trades 3
+```
+
+5s 内跑完 216 个历史异动事件回测，模拟仓位演化（与后端 Ambush close cascade 对齐：ATR 止损 / max_hold / K 线 trailing / signal_reverse，并计入共享深度、taker fee、整点 funding）。**输出两块**：
+1. **总结表**：触发数 / 胜率 / 净收益 / depth+fee+funding 成本 / 最大回撤 / Sharpe + 方向分布（long/short/skip）
+2. **最差 3 笔 + 最好 3 笔**（`--dump-trades 3` 自动打印）：让用户感性看清楚 "什么 case bot 会亏 / 什么 case 能抓到"
+
+回测方向必须和实盘方向语义一致：所有方向都会先按规则读事件信号；`short` / `long` 只放行同方向信号，反方向信号记为 `direction_mismatch` 并 skip；`balanced` 放行 long 和 short。
+
+**展示原则**：把上面两块都给用户看，**信息性参考，不挡** — 用户看完自己决定是否继续创建。回测结果差不一定阻止（市场未来不等于历史）；但用户应该 informed before 上实盘。
+
+回测命令完整参考：`cat {baseDir}/knowledge/ambush_backtest_commands.md`
+
+**回测结果展示后**，给用户**这套** options（顺序固定，不要漏掉 verify 这一条）：
+
+1. **调参数** → 改 `direction` / `aggressiveness` / `position_pct` 后回到 Ambush Step 2 重跑 propose + backtest
+2. **仅平台 verify**（推荐，不上线）→ 进 Ambush Step 3.5，把链式回测上传到平台对账。**跑完就停**，等用户下一步指令再走 Step 4
+3. **直接创建实盘**（跳过 verify）→ 跳到 Ambush Step 4，不 verify 直接 bind + create-bot
+4. **取消** → 结束流程
+
+**option 2 ≠ option 3**：option 2 只对账，**绝不** 自动续接 Step 4 create-bot；option 3 是不 verify 直接上实盘。用户选哪个就严格做哪个。
+
+不要发明菜单顺序，也不要漏「平台 verify」选项 — 它对要把 bot 公开到 leaderboard 的用户是必经路径。
+
+### Ambush Step 3.5: 平台 verify（可选）
+
+如果用户选 "上传平台 verify" / "对账" / "走 verify" / "我要 leaderboard"，跑这一条：
+
+```bash
+python3 {baseDir}/scripts/ambush/upload.py \
+  --params /tmp/ambush_params.json \
+  --backtest-result /tmp/ambush_backtest_result.json \
+  --creds ~/.moss-trade-bot/agent_creds.json \
+  --display-name "<给这个 ambush bot 起个名,如 '稳健双向异动 alpha'>" \
+  --display-name-en "<English name, e.g. 'Steady ambush alpha'>" \
+  --persona "<人设,一两句,如 '稳健双向,严格止损,只抓高质量异动'>" \
+  --persona-en "<English persona>" \
+  --description "<策略描述,1-3 句,讲清 direction/仓位/止损/止盈逻辑>" \
+  --description-en "<English description>" \
+  --ambush-verify
+```
+
+> ⚠️ 这 6 个文案参数是为了让 backtest agent 在列表/leaderboard 上有人看得懂的名字 +
+> 描述（否则会显示 "Agent agt_xxx" + "暂无描述"，因为 server 端 backtest agent
+> 文案就从 verify-job payload 的 `bot.name_i18n` / `personality_i18n` /
+> `description_i18n` 来）。从 propose 阶段已经知道用户的策略风格了，按 Step 1
+> 推断的 (direction, aggressiveness) 生成自然中文名，**不要让用户重复输入**。
+> 缺省也行，upload.py 会兜底用 "Ambush 异动币回测"，但显然不如 LLM 生成的好看。
+
+输出要点：
+- `fingerprint match`：skill 本地链式回测和 server 重算结果**完全一致**（params + initial_capital + harness_version + dataset_sha256 的 SHA-256 哈希相同）
+- `verify_job_id`：平台侧持久化的 verify 记录，详情接口 / leaderboard / follower 会读这个
+- server-side `trades` / `equity` 工件链接（用户可以对照本地 `--dump-trades 3` 看哪笔不一致）
+
+如果 `fingerprint mismatch`：说明 skill 和 server 对同一份 (params, dataset) 算出不同结果，**算法层面 drift**。这种情况停下来报告，不要继续到 Step 4。原因通常是：
+- skill 端 `chained_harness.py` 或 `backtest.py::_apply_trade_costs` 跟 server 端 Go 实现不同步
+- dataset 文件被改过，本地 SHA 跟 server 的不匹配
+- harness_version 不匹配（skill 用 v1，server 期望 v2 之类）
+
+verify 通过后，**只展示结果，停下等用户**。不要自动走 Step 4 create-bot — 用户选「仅 verify」就是想先看对账结果再决定，不是想一步建实盘。
+
+展示完 verify 结果（fingerprint match / verify_job_id / server-side trades 链接），再给用户一组 **新菜单**：
+
+1. **创建实盘 bot** → 走 Ambush Step 4（用同一份 `/tmp/ambush_params.json`，无需再 propose / backtest / verify）
+2. **重跑 verify**（如果对结果不放心）→ 再来一次 Step 3.5
+3. **改参数重跑** → 回 Ambush Step 2 重新生成参数
+4. **结束** → 不上实盘，保留 verify 记录就够了
+
+verify + 创建 bot 详情参考：`cat {baseDir}/knowledge/ambush_backtest_commands.md`（"平台 verify" 段）
+
+### Ambush Step 4: 用户确认 → 绑定 + 创建 bot
+
+用户确认后才走，平台连接 + 凭证规则按「安全与透明声明」执行。
+
+> ⚠️ **必须用 `scripts/ambush/upload.py`，不要用 `scripts/live_trade.py create-bot`**。
+> `live_trade.py create-bot` 是**主流币专用**入口，调 `client.create_realtime_bot()` 时不传
+> `strategy_type` 和 `ambush_params`，server 会按 majors 路径校验 `DecisionParams` 并报
+> `rolling_max_times out of range`（ambush 参数里没这个字段）。`upload.py` 的默认模式
+> （不加 `--ambush-verify`）专门走 ambush 分流：发 `strategy_type="ambush"` + 完整
+> `ambush_params`，server 走 `ValidateAmbushBotParams` 路径。
+
+```bash
+# 如未绑定，先 bind（与主流币流程共用，platform_ops.md 也有）
+python3 {baseDir}/scripts/live_trade.py bind \
+  --pair-code <user-提供> \
+  --platform-url <skill config trade_api_url>
+
+# 创建 ambush bot — 默认模式（不带 --ambush-verify）= create-realtime-bot
+python3 {baseDir}/scripts/ambush/upload.py \
+  --params /tmp/ambush_params.json \
+  --backtest-result /tmp/ambush_backtest_result.json \
+  --creds ~/.moss-trade-bot/agent_creds.json \
+  --display-name "<生成的中文 bot 名>" \
+  --display-name-en "<English name>" \
+  --persona "<中文 persona>" \
+  --persona-en "<English persona>" \
+  --description "<中文 desc>" \
+  --description-en "<English desc>"
+```
+
+`upload.py` 内部:
+1. 读 `/tmp/ambush_params.json`（含 direction / long_params / short_params / rhythm）
+2. 转 V2 wire 格式（decimal → string，per `trading_client._ambush_params_for_wire`）
+3. 调 `client.create_realtime_bot(strategy_type="ambush", ambush_params=...)`，
+   server 端 `RealtimeBotService.CreateBot` 见 `isAmbush=true` 走双通道 schema 校验，
+   `DecisionParams` 完全不参与
+4. 平台 ambush 注册器（`cmd/server/ambush.go RegisterAmbushBot`）自动订阅事件链
+5. 写回 `agent_creds.json` 的 `bot_id`
+
+**不需要** `--symbol "*"` 这种参数 — server 自动塞 `AmbushBotSymbolPlaceholder`。
+
+**双语文案约束**（与主流币一致）：
+- `display_name` / `display_name_en` <= 64 字
+- `persona` / `persona_en` <= 64 字
+- `description` / `description_en` <= 280 字
+- 用户原始描述是中文时，必须自己写自然的英文版（不要 copy 中文到 en 字段）
+
+server 端 `ValidateAmbushBotParams` 通过后返回 `bot_id`，已自动写回 `agent_creds.json`。
+
+### Ambush Step 5: 启动 live_runner
+
+**`create-bot` 不会自动启动 live_runner** — 用户需要手动起一个 long-running 进程：
+
+```bash
+python3 -m ambush.live_runner --creds ~/.moss-trade-bot/agent_creds.json
+```
+
+典型部署方式（任选其一）：
+- Claude Code 长会话里直接跑（前台）
+- `nohup` / `setsid` 后台进程（适合临时测试）
+- systemd unit（生产推荐，崩溃自动重启 + 系统重启后自启）
+
+live_runner 跑起来后：
+- 连 WS `/ambush-events/ws` 订阅两类信号
+- 每个 detected event：跑 5 决策规则 + 5 个 rhythm gate（dedup / cooldown / max_trades / momentum / entry_delay）→ 决定开仓 + 下单
+- 每个 exit_signal：直接平仓（advisory，但默认 act）
+- close_monitor 30s 跳，跟 trailing + max_hold_hours
+- 所有动作记 SQLite `~/.moss-trade-bot/ambush_state.db`（dedup 状态 / position 跟踪 / 决策审计）
+
+### Ambush 明确**不做**的事（与主流币不同）
+
+- ❌ 不跑 majors 的 `fetch_data.py` fingerprint（异动币是事件集合 + 阈值组合，没有"单币 + K 线时段"概念）
+- ❌ 不做平台 `verify`（ambush 没有 K 线连续回放语义，server 端无法等价重放；本地 216 事件回测 + 最差/最好 N 笔展示是替代）
+- ❌ 不做 `evolve`（参数创建后**完全冻结**，不进化）
+- ❌ 不接受 22 币之外的 symbol — ambush watchlist 是 server 端动态维护（小市值 OI 异常筛选），不是 skill 选的；用户不能指定"只做某个币"
+- ❌ 不允许同时持仓多个 symbol — server 端 single_position_lock 强制单持仓
+
+### Ambush 操作手册引用
+
+- **平台连接 + 凭证管理 + bind / unbind 流程**：按 `cat {baseDir}/knowledge/platform_ops.md` 的「平台 URL 规则」+「凭证存放」段执行（与主流币共用，不重复展开）
+- **改参数**：unbind 旧 bot → 重跑 Step 1-5 创建新 bot；不存在 "PATCH bot params" 接口
+
+---
+

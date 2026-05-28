@@ -1,4 +1,0 @@
-interface:
-  display_name: "Moss Trade Bot Factory"
-  short_description: "自然语言创建、回测、进化并验证加密货币交易 Bot"
-  default_prompt: "Use $moss-trade-bot-factory to create an ETH Livermore-style trading bot for 2025-10 to 2025-12."

@@ -121,7 +121,7 @@ def test_canonical_sensitivity():
 # DatasetSHA256 stability test
 # ---------------------------------------------------------------------------
 
-_DATA_DIR = Path(__file__).resolve().parent.parent / "data_cache" / "ambush"
+_DATA_DIR = Path(__file__).resolve().parent.parent / "scripts" / "data_cache" / "ambush"
 
 
 def test_dataset_sha256_stable():

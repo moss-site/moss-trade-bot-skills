@@ -37,7 +37,14 @@ from ambush.chained_harness import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-_DATA_DIR = Path(__file__).resolve().parent.parent / "data_cache" / "ambush"
+# In v1.0.27-beta the ambush dataset lives under scripts/data_cache/ambush/
+# (lightweight pattern — `scripts/data_cache/` is the only data location, with
+# .gitignore keeping files out of git; populated either by local copy during
+# dev or by ensure_data_cache() in production). Previous 1.0.25-beta layout
+# had data_cache at the skill root, hence the parent.parent.
+_DATA_DIR = (
+    Path(__file__).resolve().parent.parent / "scripts" / "data_cache" / "ambush"
+)
 
 
 def _short_only_params() -> AmbushBotParams:

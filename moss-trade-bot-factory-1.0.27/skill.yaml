@@ -1,5 +1,5 @@
-name: moss-trade-bot-factory-1.0.27-beta
-version: 1.0.27-beta
+name: moss-trade-bot-factory-1.0.27
+version: 1.0.27
 author: fei-moss
 description: >
   从自然语言创建加密货币交易 Bot。用户一句话包含币种、回测时间区间

@@ -4,10 +4,20 @@
 
 ## 数据资产前置
 
-确认 `{baseDir}/data_cache/ambush/` 下有：
+**v1.0.27 起走轻量模式 — 首次运行 `backtest.py` / `upload.py` 时自动从 GitHub
+Release 下载数据集到用户 cache**,无需手动准备。默认路径由
+`scripts/core/data_cache_archive.resolve_data_root()` 决定:
+
+| 优先级 | 路径 | 用途 |
+|---|---|---|
+| 1 | `$MOSS_TRADE_BOT_DATA_DIR` (env) | 显式 dev 覆盖 |
+| 2 | `{baseDir}/scripts/data_cache/` | 本地 dev cache(`.gitignore` 默认空) |
+| 3 | `~/.cache/moss-trade-bot-factory/v<version>/data_cache/` | **生产路径**:首次运行自动 hydrate + sha256 校验 |
+
+数据集结构(解压后):
 
 ```
-data_cache/ambush/
+<data_cache>/ambush/
 ├── events.csv                   # 216 历史异动事件 + 后续涨跌
 ├── features.csv                 # 19 项预算特征
 ├── klines/<base>.csv × 87       # 触发窗口 K 线（剪枝后 ~7MB）
@@ -15,10 +25,9 @@ data_cache/ambush/
 └── market_cap_snapshot.json
 ```
 
-如果缺，跑根目录的一次性迁移脚本：
-```bash
-python3 scripts/migrate_ambush_data.py
-```
+如果自动下载失败,常见原因:网络不通 / GitHub Release 资产未发布 /
+`archive_sha256` 不匹配。详见 `scripts/core/data_cache_archive.py`
+的错误信息。
 
 ## 标准回测命令
 
@@ -176,7 +185,7 @@ BONK/USDC        2025-06-14    short  rule_short_spike_extreme           3    +3
 
 | 错误 | 原因 | 解决 |
 |------|------|------|
-| `FileNotFoundError: data_cache/ambush/events.csv` | 数据未迁移 | 跑 `scripts/migrate_ambush_data.py` |
+| `FileNotFoundError: data_cache/ambush/events.csv` | 自动 hydrate 失败(网络 / sha256 不匹配) | 重跑命令(会重新下载);或手动 `python3 -c "import sys; sys.path.insert(0,'scripts'); from core.data_cache_archive import ensure_data_cache; print(ensure_data_cache())"` 查具体报错 |
 | `triggered_count: 0` | 阈值太严 | 三个触发阈值任一调低 |
 | `WARN: no kline for XYZ` | 87 币种里缺某币 K 线 | 不影响整体结果，但该币事件被跳过；可补 K 线后重跑 |
 | 回测时间 > 30 秒 | 数据加载/计算异常 | 检查 K 线文件是否完好（pd.read_csv 报错） |

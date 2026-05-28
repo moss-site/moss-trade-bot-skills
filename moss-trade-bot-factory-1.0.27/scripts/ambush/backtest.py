@@ -35,12 +35,29 @@ import pandas as pd
 getcontext().prec = 28
 
 # ===== 路径 =====
-DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data_cache" / "ambush"
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from ambush import features, indicators  # noqa: E402
+
+
+def _default_data_dir() -> Path:
+    """Resolve the ambush data dir, hydrating from GitHub Release on first run.
+
+    See ``core.data_cache_archive.resolve_data_root()`` for the precedence
+    rules (env override → in-skill dev cache → user cache hydrate).
+    """
+    from core.data_cache_archive import resolve_data_root  # noqa: E402 — lazy
+    return resolve_data_root() / "ambush"
+
+
+# Back-compat alias for any caller that imported the module-level constant.
+# Evaluated lazily on first attribute access via __getattr__ below.
+def __getattr__(name: str):  # PEP 562
+    if name == "DEFAULT_DATA_DIR":
+        return _default_data_dir()
+    raise AttributeError(name)
 
 
 def _D(v) -> Decimal:
@@ -826,13 +843,14 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--params", required=True, help="ambush bot 参数 JSON 路径")
     p.add_argument("--output", required=True, help="回测结果输出 JSON 路径")
-    p.add_argument("--data-dir", default=str(DEFAULT_DATA_DIR), help="data_cache/ambush 路径")
+    p.add_argument("--data-dir", default=None,
+                   help="data_cache/ambush 路径；省略时自动定位(MOSS_TRADE_BOT_DATA_DIR / 本地 dev cache / GitHub Release 自动 hydrate)")
     p.add_argument("--dump-trades", type=int, default=0, metavar="N",
                    help="额外打印最差 N 笔 + 最好 N 笔交易明细（用于查 outlier）。"
                         "trades 列表本身始终在 result JSON 里")
     args = p.parse_args()
 
-    data_dir = Path(args.data_dir)
+    data_dir = Path(args.data_dir) if args.data_dir else _default_data_dir()
     if not data_dir.exists():
         print(f"[backtest] ERROR: data dir {data_dir} not found", file=sys.stderr)
         sys.exit(1)

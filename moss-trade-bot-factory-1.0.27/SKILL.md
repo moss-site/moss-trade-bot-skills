@@ -429,8 +429,11 @@ server 端 `ValidateAmbushBotParams` 通过后返回 `bot_id`，已自动写回 
 **`create-bot` 不会自动启动 live_runner** — 用户需要手动起一个 long-running 进程：
 
 ```bash
+cd {baseDir}/scripts
 python3 -m ambush.live_runner --creds ~/.moss-trade-bot/agent_creds.json
 ```
+
+(`python3 -m ambush.live_runner` 依赖 `scripts/` 在 `sys.path` 上;**必须先 `cd {baseDir}/scripts`**,否则 `ModuleNotFoundError: No module named 'ambush'`。)
 
 典型部署方式（任选其一）：
 - Claude Code 长会话里直接跑（前台）
@@ -447,7 +450,7 @@ live_runner 跑起来后：
 ### Ambush 明确**不做**的事（与主流币不同）
 
 - ❌ 不跑 majors 的 `fetch_data.py` fingerprint（异动币是事件集合 + 阈值组合，没有"单币 + K 线时段"概念）
-- ❌ 不做平台 `verify`（ambush 没有 K 线连续回放语义，server 端无法等价重放；本地 216 事件回测 + 最差/最好 N 笔展示是替代）
+- ❌ 不走主流币的 K 线 walk-forward verify 契约 — ambush 是**事件 dataset + 链式仓位回放**(Step 3.5 走的就是这条新路径,server 端按 fingerprint 对账,与主流币 verify 是**两套独立契约**)
 - ❌ 不做 `evolve`（参数创建后**完全冻结**，不进化）
 - ❌ 不接受 22 币之外的 symbol — ambush watchlist 是 server 端动态维护（小市值 OI 异常筛选），不是 skill 选的；用户不能指定"只做某个币"
 - ❌ 不允许同时持仓多个 symbol — server 端 single_position_lock 强制单持仓

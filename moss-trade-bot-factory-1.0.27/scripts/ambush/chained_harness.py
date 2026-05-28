@@ -508,8 +508,9 @@ class ChainedHarness:
     """Mirror of Go internal/ambush/backtest.Run.
 
     Usage:
+        from core.data_cache_archive import resolve_data_root
         params = AmbushBotParams.from_dict(raw_params)
-        dataset = load_dataset("data_cache/ambush")
+        dataset = load_dataset(resolve_data_root() / "ambush")
         result = ChainedHarness(params).run(dataset, Decimal("10000"))
     """
 

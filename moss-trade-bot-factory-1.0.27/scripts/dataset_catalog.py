@@ -14,7 +14,22 @@ from datetime import datetime, timezone
 
 
 SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+# Static fallback used only when --data-dir is explicitly passed or when the
+# lazy resolver (resolve_data_root) declines to fire — see _resolve_default()
+# below for the production path that auto-hydrates from GitHub Release.
 DEFAULT_DATA_DIR = os.path.join(SCRIPTS_DIR, "data_cache")
+
+
+def _resolve_default() -> str:
+    """Lazy default for --data-dir.
+
+    Mirrors the ambush-side helper: route through
+    ``core.data_cache_archive.resolve_data_root()`` so fresh checkouts (where
+    ``scripts/data_cache/`` is ``.gitignore``-empty) auto-hydrate the
+    majors CSV bundle from the pinned GitHub Release.
+    """
+    from core.data_cache_archive import resolve_data_root  # noqa: E402 — lazy
+    return str(resolve_data_root())
 CSV_RE = re.compile(r"^hyperliquid_([A-Z0-9]+?)(USDC|USDT|BUSD)_([0-9a-z]+)_(.+)\.csv$", re.IGNORECASE)
 
 
@@ -112,11 +127,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Discover bundled fixed dataset coverage")
     parser.add_argument("--symbol", default="BTC/USDC", help="Symbol to resolve, e.g. BTC/USDC")
     parser.add_argument("--timeframe", default="15m")
-    parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR)
+    parser.add_argument("--data-dir", default=None,
+                        help="data_cache 路径；省略时自动定位(MOSS_TRADE_BOT_DATA_DIR / 本地 dev cache / GitHub Release 自动 hydrate)")
     parser.add_argument("--list", action="store_true", help="List every discovered dataset")
     args = parser.parse_args()
 
-    items = discover(args.data_dir, args.timeframe)
+    data_dir = args.data_dir or _resolve_default()
+    items = discover(data_dir, args.timeframe)
     if args.list:
         payload = {"datasets": [_public(item) for item in sorted(items, key=lambda x: x["compact"])]}
         print(json.dumps(payload, ensure_ascii=False, indent=2))

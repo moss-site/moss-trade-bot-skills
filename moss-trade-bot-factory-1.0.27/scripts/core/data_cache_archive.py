@@ -288,19 +288,88 @@ def ensure_data_cache() -> Path:
     return data_dir
 
 
+def _local_data_root_has_content() -> bool:
+    """True iff <skill>/scripts/data_cache/ holds at least one expected file.
+
+    Used by `resolve_data_root()` to detect a dev-mode pre-populated cache
+    (where `.gitignore` keeps the dir empty in fresh checkouts).
+    """
+    if not LOCAL_DATA_DIR.is_dir():
+        return False
+    # Cheap heuristics: any top-level CSV (majors) or the ambush/ subdir.
+    if any(LOCAL_DATA_DIR.glob("*.csv")):
+        return True
+    if (LOCAL_DATA_DIR / "ambush").is_dir():
+        return True
+    return False
+
+
+def resolve_data_root() -> Path:
+    """Return the active data_cache root, hydrating on first call if needed.
+
+    Resolution precedence:
+
+    1. ``$MOSS_TRADE_BOT_DATA_DIR`` — explicit dev override (any path).
+    2. ``<skill>/scripts/data_cache/`` — used as-is when it already contains
+       data (dev workflow: `git clone` + manually drop CSVs in).
+    3. ``ensure_data_cache()`` — downloads + verifies + extracts the GitHub
+       Release asset into ``~/.cache/moss-trade-bot-factory/v<version>/data_cache/``.
+       This is the production code path for fresh user checkouts where the
+       in-repo `scripts/data_cache/` is `.gitignore`d empty.
+
+    Callers should treat the return value as **read-only**.
+    """
+    override = os.environ.get("MOSS_TRADE_BOT_DATA_DIR")
+    if override:
+        return Path(override).expanduser()
+    if _local_data_root_has_content():
+        return LOCAL_DATA_DIR
+    return ensure_data_cache()
+
+
+def _manifest_relative_paths(manifest: dict[str, Any]) -> list[PurePosixPath]:
+    """Return each manifest entry's `path` stripped of the leading `data_cache/`."""
+    out: list[PurePosixPath] = []
+    for item in manifest["files"]:
+        entry = PurePosixPath(item["path"])
+        if entry.parts and entry.parts[0] == "data_cache":
+            entry = PurePosixPath(*entry.parts[1:])
+        out.append(entry)
+    return out
+
+
 def ensure_data_file(path: str | os.PathLike[str]) -> str:
+    """Resolve a single data file by its in-cache path or its basename.
+
+    Supports nested layouts (e.g. `ambush/klines/SAGA.csv`): the caller may
+    pass either the full relative path (with or without the leading
+    `data_cache/`) or a bare basename. The bare-basename form is kept for
+    back-compat with the original flat layout (majors only); for ambush
+    files a full path is preferred since multiple subtrees may share names.
+    """
     candidate = Path(path)
     if candidate.is_file():
         return str(candidate)
 
     manifest = load_manifest()
-    basename = candidate.name
-    expected_names = {Path(item["path"]).name for item in manifest["files"]}
-    if basename not in expected_names:
+    entries = _manifest_relative_paths(manifest)
+
+    # Normalise the candidate: strip a leading "data_cache/" if present.
+    parts = candidate.parts
+    if parts and parts[0] == "data_cache":
+        parts = parts[1:]
+    candidate_rel = PurePosixPath(*parts) if parts else PurePosixPath(candidate.name)
+
+    # Prefer exact relative-path match (handles nested correctly).
+    match = next((e for e in entries if str(e) == str(candidate_rel)), None)
+    # Fall back to basename match for the flat-layout call sites.
+    if match is None:
+        match = next((e for e in entries if e.name == candidate.name), None)
+    if match is None:
         raise FileNotFoundError(f"CSV file not found: {candidate}")
 
     data_dir = ensure_data_cache()
-    cached = data_dir / basename
+    cached = data_dir / Path(*match.parts)
     if not cached.is_file():
         raise FileNotFoundError(f"CSV file not found after data cache hydrate: {cached}")
     return str(cached)

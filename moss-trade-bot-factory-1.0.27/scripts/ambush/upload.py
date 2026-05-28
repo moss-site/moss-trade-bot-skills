@@ -37,7 +37,15 @@ if str(PARENT_DIR) not in sys.path:
 from trading_client import TradingClient  # noqa: E402
 
 
-_DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data_cache" / "ambush"
+def _default_data_dir() -> Path:
+    """Resolve the ambush data dir, hydrating from GitHub Release on first run.
+
+    Routes through ``core.data_cache_archive.resolve_data_root()`` so the
+    same lookup honours ``$MOSS_TRADE_BOT_DATA_DIR``, dev-populated
+    ``<skill>/scripts/data_cache/``, or the auto-hydrated user cache.
+    """
+    from core.data_cache_archive import resolve_data_root  # noqa: E402 — lazy import; only fires when --data-dir not given
+    return resolve_data_root() / "ambush"
 
 
 def _load_creds(creds_path: str) -> dict:
@@ -253,7 +261,7 @@ def main() -> None:
                 "platform base URL missing. Pass --platform-url or save base_url in agent_creds.json."
             )
         user_uuid = args.user_uuid or creds.get("user_uuid", "")
-        data_dir = Path(args.data_dir) if args.data_dir else _DEFAULT_DATA_DIR
+        data_dir = Path(args.data_dir) if args.data_dir else _default_data_dir()
         status, body = upload_ambush_verify_job(
             creds=creds,
             base_url=base_url,

@@ -232,5 +232,49 @@ class NestedPathTest(unittest.TestCase):
             dca._safe_member_name("../etc/passwd", expected)
 
 
+class MacOSMetadataFilterTest(unittest.TestCase):
+    """macOS BSD tar(1) silently injects AppleDouble (`._*`), `.DS_Store`,
+    and `__MACOSX/` entries unless COPYFILE_DISABLE=1 is set. The helper
+    must skip these (return None) rather than raise — otherwise any tarball
+    packed on macOS aborts extraction with `unsafe archive member path`."""
+
+    def test_applesinge_top_level(self):
+        self.assertTrue(dca._is_macos_metadata("._data_cache"))
+
+    def test_applesinge_nested(self):
+        self.assertTrue(dca._is_macos_metadata(
+            "data_cache/._hyperliquid_BTCUSDC_15m_2025-10-06_148d.csv"
+        ))
+        self.assertTrue(dca._is_macos_metadata("data_cache/ambush/._events.csv"))
+        self.assertTrue(dca._is_macos_metadata("data_cache/._ambush"))
+
+    def test_ds_store(self):
+        self.assertTrue(dca._is_macos_metadata(".DS_Store"))
+        self.assertTrue(dca._is_macos_metadata("data_cache/.DS_Store"))
+        self.assertTrue(dca._is_macos_metadata("data_cache/ambush/.DS_Store"))
+
+    def test_macosx_dir(self):
+        self.assertTrue(dca._is_macos_metadata("__MACOSX/anything"))
+        self.assertTrue(dca._is_macos_metadata("data_cache/__MACOSX/foo"))
+
+    def test_real_files_not_treated_as_metadata(self):
+        self.assertFalse(dca._is_macos_metadata("data_cache/hyperliquid_BTCUSDC_15m.csv"))
+        self.assertFalse(dca._is_macos_metadata("data_cache/ambush/events.csv"))
+        self.assertFalse(dca._is_macos_metadata("data_cache/ambush/klines/SAGA.csv"))
+        # Edge: filename containing underscore but not starting with ._
+        self.assertFalse(dca._is_macos_metadata("data_cache/_underscore_prefix.csv"))
+
+    def test_safe_member_name_silently_skips_metadata(self):
+        expected = {"data_cache/ambush/klines/SAGA.csv"}
+        # All these should return None (skip), not raise:
+        self.assertIsNone(dca._safe_member_name("._data_cache", expected))
+        self.assertIsNone(dca._safe_member_name("data_cache/._ambush", expected))
+        self.assertIsNone(dca._safe_member_name(
+            "data_cache/ambush/klines/._SAGA.csv", expected
+        ))
+        self.assertIsNone(dca._safe_member_name(".DS_Store", expected))
+        self.assertIsNone(dca._safe_member_name("__MACOSX/foo", expected))
+
+
 if __name__ == "__main__":
     unittest.main()

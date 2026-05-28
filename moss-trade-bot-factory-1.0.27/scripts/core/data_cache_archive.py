@@ -177,12 +177,37 @@ def download_archive(destination: Path, manifest: dict[str, Any]) -> None:
         raise DataCacheError(f"{_download_help(manifest)} {exc}") from exc
 
 
+def _is_macos_metadata(name: str) -> bool:
+    """True iff `name` is macOS AppleDouble/Finder junk that BSD tar emits.
+
+    macOS `tar(1)` adds these by default unless ``COPYFILE_DISABLE=1`` is set:
+      - ``._<filename>``      AppleDouble resource fork metadata
+      - ``__MACOSX/...``      Finder zip metadata directory
+      - ``.DS_Store``         Finder folder customisation
+      - ``.AppleDouble``      Netatalk/AppleShare equivalent
+
+    The data inside is opaque metadata we don't need; the underlying files
+    travel separately and validate against their own manifest sha256. Silently
+    skipping these keeps extraction working regardless of who packed the tar.
+    """
+    base = posixpath.basename(name)
+    return (
+        base.startswith("._")
+        or base == ".DS_Store"
+        or base == ".AppleDouble"
+        or name.startswith("__MACOSX/")
+        or "/__MACOSX/" in name
+    )
+
+
 def _safe_member_name(member_name: str, expected: set[str]) -> str | None:
     """Return the target-relative path (preserves subdir) or None to skip.
 
     Subdir support is required because the ambush dataset uses nested paths
     like `data_cache/ambush/klines/<BASE>.csv`. Behaviour:
 
+    - macOS metadata entries (`._*`, `.DS_Store`, `__MACOSX/...`) — return
+      None (silently skip; see `_is_macos_metadata` for the full set).
     - Root entries (`.`, `data_cache`) and intermediate directory entries
       that are prefixes of expected file paths (e.g. `data_cache/ambush/`):
       return None — caller will recognise these aren't files and just create
@@ -192,6 +217,8 @@ def _safe_member_name(member_name: str, expected: set[str]) -> str | None:
     - Anything else (path traversal, absolute path, unlisted file): raise.
     """
     normalized = posixpath.normpath(member_name.replace("\\", "/"))
+    if _is_macos_metadata(normalized):
+        return None
     if normalized.startswith("/") or normalized == ".." or normalized.startswith("../"):
         raise DataCacheError(f"unsafe archive member path: {member_name}")
     if normalized in (".", "data_cache"):

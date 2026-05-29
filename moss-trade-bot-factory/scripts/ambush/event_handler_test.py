@@ -652,5 +652,60 @@ class TestPositionLockSerializesConcurrent(unittest.TestCase):
         self.assertFalse(t_b.is_alive(), "thread B should have completed")
 
 
+class TestPositionsCache(unittest.TestCase):
+    """get_positions_cached collapses a burst of exit_signal lookups into one
+    network call (fixes the bootstrap-drain backlog where 100+ broadcast
+    exit_signals each hit get_positions). Invalidation after open/close keeps
+    it from serving a stale snapshot across a position change."""
+
+    def _make_handler(self):
+        client = MagicMock()
+        params = {
+            "direction": "balanced",
+            "long_params": {"leverage": 3, "position_pct": 0.20, "stop_loss_pct": 0.08,
+                            "trailing_pct": 0.30, "max_hold_hours": 30, "momentum_bars": 0,
+                            "cooldown_bars": 1},
+            "short_params": {"leverage": 3, "position_pct": 0.20, "stop_loss_pct": 0.40,
+                             "trailing_pct": 0.25, "max_hold_hours": 168, "cooldown_bars": 15,
+                             "entry_delay_bars": 16},
+            "rhythm": {"max_trades_per_event": 1, "same_coin_dedup_days": 7},
+        }
+        return event_handler.EventHandler(client, params), client
+
+    def test_burst_collapses_to_one_fetch(self):
+        h, client = self._make_handler()
+        client.get_positions.return_value = []
+        # 50 exit_signals in the same window → 1 network call
+        for _ in range(50):
+            self.assertEqual(h.get_positions_cached(ttl=5.0), [])
+        self.assertEqual(client.get_positions.call_count, 1,
+                         "burst within TTL must collapse to a single get_positions")
+
+    def test_ttl_expiry_refetches(self):
+        h, client = self._make_handler()
+        client.get_positions.return_value = []
+        h.get_positions_cached(ttl=0.0)  # ttl=0 → always stale
+        h.get_positions_cached(ttl=0.0)
+        self.assertEqual(client.get_positions.call_count, 2,
+                         "expired cache must refetch")
+
+    def test_invalidate_forces_refetch(self):
+        h, client = self._make_handler()
+        client.get_positions.return_value = []
+        h.get_positions_cached(ttl=600)          # fetch 1, cached
+        h.get_positions_cached(ttl=600)          # served from cache
+        self.assertEqual(client.get_positions.call_count, 1)
+        h.invalidate_positions_cache()           # position changed
+        h.get_positions_cached(ttl=600)          # fetch 2
+        self.assertEqual(client.get_positions.call_count, 2,
+                         "invalidate must drop cache so next call refetches")
+
+    def test_fetch_error_propagates(self):
+        h, client = self._make_handler()
+        client.get_positions.side_effect = RuntimeError("network down")
+        with self.assertRaises(RuntimeError):
+            h.get_positions_cached()
+
+
 if __name__ == "__main__":
     unittest.main()

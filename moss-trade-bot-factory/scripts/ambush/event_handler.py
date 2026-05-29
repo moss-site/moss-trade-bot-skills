@@ -141,6 +141,49 @@ class EventHandler:
         # See ambush-qa-followups §C2.
         self._position_lock = threading.RLock()
 
+        # Short-TTL positions cache for the exit_signal path. exit_signals
+        # are broadcast by the server for every reverting cluster across the
+        # whole watchlist (50+ coins), regardless of whether THIS bot holds a
+        # position. On a fresh bootstrap / after a server restart the runner
+        # replays 100+ of them through BOTH the WS-bootstrap and poller
+        # channels — without caching that is 2 × N synchronous get_positions
+        # round-trips (~1s each), which starves the event-poll loop for
+        # minutes. Single-position-lock means the bot holds at most ONE
+        # position, so a brief cache is safe: a burst collapses to ~1 fetch,
+        # and an empty result short-circuits every pending exit to no_position
+        # with zero network. NOT used by the open path (process_event), which
+        # needs fresh server truth for the single-position pre-check.
+        self._positions_cache: list | None = None
+        self._positions_cache_at: float = 0.0
+        self._positions_cache_lock = threading.Lock()
+
+    def get_positions_cached(self, ttl: float = 5.0) -> list:
+        """Return current positions, served from a short-TTL cache.
+
+        Used by `process_exit_signal` only. Raises (does not swallow) on
+        fetch failure so the caller can defer and leave the signal
+        unmarked for redelivery. A successful fetch refreshes the cache;
+        concurrent misses may each fetch (harmless — at worst matches the
+        old per-signal behaviour).
+        """
+        now = time.monotonic()
+        with self._positions_cache_lock:
+            if self._positions_cache is not None and (now - self._positions_cache_at) < ttl:
+                return self._positions_cache
+        positions = self.client.get_positions() or []
+        with self._positions_cache_lock:
+            self._positions_cache = positions
+            self._positions_cache_at = time.monotonic()
+        return positions
+
+    def invalidate_positions_cache(self) -> None:
+        """Drop the cached positions. Called right after this bot opens or
+        closes a position so the next exit_signal sees fresh truth instead
+        of a stale snapshot from before the position changed."""
+        with self._positions_cache_lock:
+            self._positions_cache = None
+            self._positions_cache_at = 0.0
+
     def _side_cfg(self, side: str) -> dict:
         """Per-direction params bag."""
         return self.long_cfg if side == decision_mod.SIDE_LONG else self.short_cfg
@@ -515,7 +558,7 @@ def process_exit_signal(
         # advisory — if the skill has already closed elsewhere (manual /
         # close_monitor / server stop_loss), we just record no_position.
         try:
-            positions = handler.client.get_positions() or []
+            positions = handler.get_positions_cached() or []
         except Exception as e:
             logger.warning(
                 "ambush handler: exit_signal_id=%d get_positions failed: %s — will retry on next signal",
@@ -608,6 +651,10 @@ def process_exit_signal(
                 db_path, exit_signal_id, opening_event_id, target_symbol,
                 reason, "closed", order_id=order_id_str,
             )
+            # Position just changed (flat now) — drop the positions cache so
+            # the next exit_signal re-reads server truth instead of the
+            # pre-close snapshot.
+            handler.invalidate_positions_cache()
             # Record close for downstream rhythm gates (cooldown_bars).
             # target_symbol is the USDC perp; strip to HL base to match
             # the dedup key used at open time.
@@ -791,6 +838,10 @@ def _run_deferred_open(
             order_id=order_id, order_status=status, error_msg=err,
         )
         if status == "placed":
+            # Deferred open took a position — drop the positions cache so a
+            # later exit_signal sees fresh truth, same as the immediate-open
+            # path in process_event.
+            handler.invalidate_positions_cache()
             try:
                 db.record_symbol_action(
                     db_path, sym_base, "open",
@@ -1397,6 +1448,10 @@ def _process_event_locked(
         _stamp_audit_and_post(decision.side, decision.reason, source_order_id=str(order_id or ""))
         if status == "placed":
             db.mark_event_synced(db_path, event_id)
+            # Bot just took a position — drop the positions cache so a
+            # subsequent exit_signal for this symbol sees the new position
+            # instead of a stale "flat" snapshot from before the open.
+            handler.invalidate_positions_cache()
             # Record successful open for downstream rhythm gates
             # (same_coin_dedup_days, cooldown_bars, max_trades_per_event).
             # Symbol stored is the HL base (without USDC suffix) to match

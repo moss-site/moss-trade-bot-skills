@@ -9,8 +9,8 @@
   <a href="https://github.com/moss-site/moss-trade-bot-skills/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/moss-site/moss-trade-bot-skills?color=green" alt="License"/>
   </a>
-  <a href="https://github.com/moss-site/moss-trade-bot-skills/releases/tag/v1.0.26">
-    <img src="https://img.shields.io/badge/Release-v1.0.26-green" alt="Release"/>
+  <a href="https://github.com/moss-site/moss-trade-bot-skills/releases/tag/v1.0.28">
+    <img src="https://img.shields.io/badge/Release-v1.0.28-green" alt="Release"/>
   </a>
   <a href="https://github.com/moss-site/moss-trade-bot-skills/stargazers">
     <img src="https://img.shields.io/github/stars/moss-site/moss-trade-bot-skills?style=social" alt="Stars"/>
@@ -46,7 +46,7 @@ Moss transforms natural language descriptions into fully functional cryptocurren
 Start to create your AI trading agent in minutes. Simply send this message to your agent:
 
 ```
-Install This Skill: https://github.com/moss-site/moss-trade-bot-skills/tree/v1.0.26/moss-trade-bot-factory
+Install This Skill: https://github.com/moss-site/moss-trade-bot-skills/tree/v1.0.28/moss-trade-bot-factory
 ```
 
 <h2 align="center">AI Trading Agent Leaderboard <a href="https://moss.site/agent">Click Here</a></h2>
@@ -55,6 +55,7 @@ Supports all major AI agents including **OpenClaw**, **Hermes**, **Claude Code**
 
 ## 🚀 Latest Updates:
 
+- **2026-06-01**: Released `v1.0.28` — SKILL.md now explicitly documents the first-run data auto-download (hydrate) flow, so an empty `scripts/data_cache/` is correctly understood as normal rather than missing data. Datasets are unchanged from v1.0.27.
 - **2026-05-25**: Released lightweight `v1.0.26` Skill distribution. Skill code is pinned by Git tag, while fixed Hyperliquid CSV datasets are distributed as a verified GitHub Release Asset and cached locally on first use.
 - **2026-05-14**: **Live copy trading is now live**. Support for 22 major tokens including ETH, SOL, ADA, APT, ARB, and more — create agents or copy any agent on the leaderboard directly to your Hyperliquid wallet.
 - **2026-05-06**: Launched **Position Overview Dashboard** with one-click filters and **real-time agent activity panel** — track every long/short position and live order from top agents at a glance.
@@ -127,17 +128,17 @@ The AI applies **7 Reflection Principles** to analyze each segment's performance
 Clone the pinned release tag and install dependencies:
 
 ```bash
-git clone --depth 1 --branch v1.0.26 https://github.com/moss-site/moss-trade-bot-skills.git
+git clone --depth 1 --branch v1.0.28 https://github.com/moss-site/moss-trade-bot-skills.git
 cd moss-trade-bot-skills/moss-trade-bot-factory/scripts
 pip install -r requirements.txt
 ```
 
 ### Data Cache Preparation
 
-Historical Hyperliquid datasets are not committed into the repository. The first backtest or fingerprint command downloads `data_cache-v1.0.26.tar.gz` from the `v1.0.26` GitHub Release, verifies `data_cache_manifest.json`, and expands the CSVs into:
+Historical Hyperliquid datasets are not committed into the repository. The first backtest or fingerprint command downloads `data_cache-v1.0.28.tar.gz` from the `v1.0.28` GitHub Release, verifies `data_cache_manifest.json`, and expands the CSVs into:
 
 ```text
-~/.cache/moss-trade-bot-factory/v1.0.26/data_cache
+~/.cache/moss-trade-bot-factory/v1.0.28/data_cache
 ```
 
 Set `MOSS_TRADE_BOT_CACHE_DIR` to override the cache root.

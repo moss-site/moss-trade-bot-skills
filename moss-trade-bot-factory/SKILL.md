@@ -38,6 +38,11 @@ metadata: {"openclaw": {"requires": {"bins": ["python3"]}, "emoji": "🤖"}}
 
 在回答“有没有数据 / 能不能跑某区间 / 支持哪些币”前，必须运行脚本读取真实 CSV 文件，而不是凭 SKILL.md 的历史说明、旧文件名、`ls` 片段或记忆判断。
 
+> **数据获取（首次运行自动下载，必读）**：发布包里 `scripts/data_cache/` 默认是**空的**（仅 `.gitignore` 占位），**这是正常的，不是缺数据**。首次运行 `dataset_catalog.py`（或任何需要数据的脚本）时，会自动从 GitHub Release **一次性整包下载**全部固定数据集（~10MB）并缓存到 `~/.cache/moss-trade-bot-factory/v<版本>/data_cache/`，下载后即可离线使用，后续命中本地缓存不再下载。
+> - **绝不要**因为 `scripts/data_cache/` 为空、或 `ls` 看到没有 CSV 就判定“缺数据 / 不支持”——一律以 `dataset_catalog.py` 输出的 `found` 字段为准。
+> - 缓存根目录可用环境变量 `MOSS_TRADE_BOT_CACHE_DIR` 覆盖。
+> - 离线 / 代理环境下首次下载失败时，脚本会给出明确报错（提示检查网络或配置 `GITHUB_TOKEN`），照提示处理即可。
+
 若已解析出 symbol：
 
 ```bash
@@ -90,8 +95,8 @@ cd {baseDir}/scripts && python3 dataset_catalog.py --list --timeframe 15m > /tmp
 
 ## 安全与透明声明
 
-- **本地优先**：Bot 创建、回测、进化默认都在本地完成，并且使用内置 CSV 时可完全离线。
-- **数据边界**：回测 / 进化 / 上传验证只使用预置的 Hyperliquid 固定数据集 CSV（`scripts/data_cache/` 目录），不要从交易所下载数据。
+- **本地优先**：Bot 创建、回测、进化都在本地完成；固定数据集在**首次运行时自动从 GitHub Release 下载**到 `~/.cache/moss-trade-bot-factory/`，**下载后即可完全离线**（后续不再联网取数据）。
+- **数据边界**：回测 / 进化 / 上传验证只使用固定的 Hyperliquid 数据集 CSV（首次从 GitHub Release 下载并缓存到 `~/.cache`，**不从交易所拉取行情**）；发布包内 `scripts/data_cache/` 默认为空属正常，由 `dataset_catalog.py` 触发下载。
 - **平台功能（可选）**：只有用户明确要求 upload / bind / live 时才连接外部平台。默认平台地址使用 skill config `trade_api_url`，默认值 `https://ai.moss.site`。
 - **平台 URL 规则**：`--platform-url` 只填站点 origin，例如 `https://ai.moss.site`；脚本会自动补上完整 API 前缀，并请求 `https://ai.moss.site/api/v1/moss/agent/agents/bind`。
 - **本地凭证**：平台凭证默认存 `~/.moss-trade-bot/agent_creds.json`；若 skill config `agent_creds_path` 已配置，优先使用该路径。凭证只发往用户指定的平台地址。

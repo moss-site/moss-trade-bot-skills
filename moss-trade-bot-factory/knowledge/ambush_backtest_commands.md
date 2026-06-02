@@ -1,6 +1,6 @@
 # Ambush 本地回测命令模板
 
-> Step 3 用。Ambush 回测**和 majors 完全不一样** — 不是给 BTC 喂 148 天 K 线 tick，而是在 216 个历史异动事件上点状评估 bot 阈值。**单次回测 < 5 秒**。
+> Step 3 用。Ambush 回测**和 majors 完全不一样** — 不是给 BTC 喂连续 K 线 tick，而是在 216 个历史异动事件上点状评估 bot 阈值。**单次回测 < 5 秒**。
 
 ## 数据资产前置
 
@@ -19,7 +19,7 @@ Release 下载数据集到用户 cache**,无需手动准备。默认路径由
 ```
 <data_cache>/ambush/
 ├── events.csv                   # 216 历史异动事件 + 后续涨跌
-├── features.csv                 # 19 项预算特征
+├── features.csv                 # 30 列特征（symbol/trigger_ts + 28 项指标）
 ├── klines/<base>.csv × 87       # 触发窗口 K 线（剪枝后 ~7MB）
 ├── supply.json
 └── market_cap_snapshot.json

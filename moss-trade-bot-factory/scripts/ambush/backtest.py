@@ -106,6 +106,13 @@ def decide_for_event(event: dict, params: dict) -> tuple[str, str]:
     # if event.get("z_score") is not None and event["z_score"] < trig["z_score_threshold"]:
     #     return ("skip", "below_z_score_threshold")
 
+    # LOCK-STEP CONTRACT: this feature extraction + balanced_decide call must
+    # stay byte-for-byte consistent with the live path in
+    # ambush/decision.py::decision_from_event (same rsi_14 `or 50` neutral
+    # default, same chg `or 0`). If you change a default or threshold here,
+    # change it there too — divergence makes backtest and live decide the same
+    # event differently. (See server internal/ambush/strategy as the upstream
+    # source of truth for the rule logic itself.)
     signal, reason = balanced_decide(
         event["surge_15m"],
         event.get("rsi_14") or 50,

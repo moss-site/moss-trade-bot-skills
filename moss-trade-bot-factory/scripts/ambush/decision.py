@@ -112,7 +112,11 @@ def decision_from_event(event: dict, direction: str) -> Decision:
     return decide(
         DecisionInput(
             surge_15m=_as_float(event.get("surge_15m", 0)),
-            rsi_14=_as_float(event.get("rsi_14", 0)),
+            # rsi_14 default must match backtest.py's `event.get("rsi_14") or 50`
+            # — a missing/empty rsi defaults to the NEUTRAL 50, not 0 (which is
+            # extreme oversold). Keeping these in lock-step ensures the same
+            # event decides identically in live vs backtest.
+            rsi_14=_as_float(event.get("rsi_14") or 50),
             chg_before_24h=_as_float(event.get("change_before_24h_pct", 0)),
             direction=direction,
         )

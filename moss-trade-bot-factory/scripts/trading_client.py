@@ -514,30 +514,47 @@ class TradingClient:
         client_order_id: str = "",
         reasoning: str = "",
         reasoning_en: str = "",
+        symbol: str = "",
     ) -> dict:
-        """Close position through the unified order-reporting endpoint."""
-        position = self._resolve_open_position(position_side)
-        current_side = self._normalize_position_side(position.get("side") or position.get("position_side"))
-        if current_side == "LONG":
-            close_side = "sell"
-        elif current_side == "SHORT":
-            close_side = "buy"
-        else:
-            raise ValueError(f"unsupported position side: {position.get('side') or position.get('position_side')}")
+        """Close position through the unified order-reporting endpoint.
 
-        close_qty_value = str(close_qty or position.get("qty") or position.get("net_qty") or "").strip()
-        if not close_qty_value:
-            raise ValueError("close qty unavailable from current position")
-        leverage = int(position.get("leverage") or 1)
-        return self._submit_market_order(
-            close_side,
-            leverage,
-            qty=close_qty_value,
-            reduce_only=True,
-            client_order_id=client_order_id,
-            reasoning=reasoning,
-            reasoning_en=reasoning_en,
-        )
+        ``symbol`` scopes the close to a specific perp. The ambush
+        kline-driven close path manages one symbol per call and passes it
+        here; when given we temporarily override ``self.symbol`` so
+        ``_resolve_open_position`` and the reduce_only order target that
+        perp, then restore the previous value. Empty ``symbol`` keeps the
+        prior behaviour (close against the client's current symbol).
+        """
+        prev_symbol = None
+        if symbol:
+            prev_symbol = self.symbol
+            self.symbol = symbol
+        try:
+            position = self._resolve_open_position(position_side)
+            current_side = self._normalize_position_side(position.get("side") or position.get("position_side"))
+            if current_side == "LONG":
+                close_side = "sell"
+            elif current_side == "SHORT":
+                close_side = "buy"
+            else:
+                raise ValueError(f"unsupported position side: {position.get('side') or position.get('position_side')}")
+
+            close_qty_value = str(close_qty or position.get("qty") or position.get("net_qty") or "").strip()
+            if not close_qty_value:
+                raise ValueError("close qty unavailable from current position")
+            leverage = int(position.get("leverage") or 1)
+            return self._submit_market_order(
+                close_side,
+                leverage,
+                qty=close_qty_value,
+                reduce_only=True,
+                client_order_id=client_order_id,
+                reasoning=reasoning,
+                reasoning_en=reasoning_en,
+            )
+        finally:
+            if prev_symbol is not None:
+                self.symbol = prev_symbol
 
     # ── Public display (no auth) ──
 

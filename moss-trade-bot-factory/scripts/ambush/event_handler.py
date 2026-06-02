@@ -424,6 +424,14 @@ _TRANSIENT_CLOSE_ERROR_CODES = {
     "market_recovering",
     "MARKET_RECOVERING",
     "market_is_recovering",
+    # STALE_MARK_PRICE: the server's reduce_only close path resolves a fresh
+    # mark (loadFreshMarkPrice) when no decision_mark is passed — which the
+    # skill close never sends. For ambush small-caps a momentarily cold/stale
+    # mark returns this code; it is inherently transient (the realtime market
+    # loop + Reconcile refresh the mark), so a redelivery must retry instead
+    # of giving up and leaving the position open.
+    "STALE_MARK_PRICE",
+    "stale_mark_price",
     "HTTP_ERROR",            # urllib HTTP error wrapper (5xx + network)
     "internal_error",
     "INTERNAL_ERROR",

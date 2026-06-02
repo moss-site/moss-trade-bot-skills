@@ -53,5 +53,56 @@ class NormalizeSymbolTest(unittest.TestCase):
         )
 
 
+class ClosePositionSymbolScopeTest(unittest.TestCase):
+    """Regression for the ambush kline-driven close path, which calls
+    ``client.close_position(symbol=...)``. A MagicMock client masks the
+    signature mismatch, so this exercises the REAL TradingClient: the
+    method must accept ``symbol``, scope ``self.symbol`` for the close, and
+    restore it afterwards. Before the fix this raised TypeError, which
+    ``close_monitor._close_now`` swallowed → the position was never closed."""
+
+    def _client(self) -> TradingClient:
+        return TradingClient(
+            api_key="k", api_secret="s",
+            base_url="http://localhost:8088",
+            bot_id="agt_test", symbol="ORIGUSDC",
+        )
+
+    def test_symbol_kwarg_scopes_and_restores(self):
+        tc = self._client()
+        seen = {}
+
+        def fake_resolve(position_side):
+            seen["symbol_during_close"] = tc.symbol
+            return {"side": "LONG", "qty": "10", "leverage": 3}
+
+        tc._resolve_open_position = fake_resolve
+        tc._submit_market_order = lambda *a, **k: {"order": {"order_id": "1", "status": "filled"}}
+
+        out = tc.close_position(position_side="LONG", symbol="SAGAUSDC", reasoning="x")
+
+        self.assertEqual(out["order"]["order_id"], "1")
+        self.assertEqual(seen["symbol_during_close"], "SAGAUSDC")  # scoped during the close
+        self.assertEqual(tc.symbol, "ORIGUSDC")                    # restored afterwards
+
+    def test_symbol_restored_even_on_error(self):
+        tc = self._client()
+
+        def boom(position_side):
+            raise ValueError("no open position")
+
+        tc._resolve_open_position = boom
+        with self.assertRaises(ValueError):
+            tc.close_position(position_side="LONG", symbol="SAGAUSDC")
+        self.assertEqual(tc.symbol, "ORIGUSDC")  # finally-block restores on exception
+
+    def test_no_symbol_keeps_current(self):
+        tc = self._client()
+        tc._resolve_open_position = lambda side: {"side": "LONG", "qty": "5", "leverage": 1}
+        tc._submit_market_order = lambda *a, **k: {"order": {"order_id": "2", "status": "filled"}}
+        tc.close_position(position_side="LONG")  # no symbol → unchanged
+        self.assertEqual(tc.symbol, "ORIGUSDC")
+
+
 if __name__ == "__main__":
     unittest.main()

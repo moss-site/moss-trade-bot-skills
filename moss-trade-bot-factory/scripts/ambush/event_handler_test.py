@@ -707,5 +707,26 @@ class TestPositionsCache(unittest.TestCase):
             h.get_positions_cached()
 
 
+class ClassifyCloseResultTransientTest(unittest.TestCase):
+    """Regression: a server STALE_MARK_PRICE on the reduce_only close path
+    (ambush small-cap with a momentarily cold/stale mark) must be treated as
+    TRANSIENT so a redelivery retries, instead of being marked terminal —
+    which would mark the exit processed and leave the position open."""
+
+    def test_stale_mark_price_is_transient(self):
+        for msg in ("mark price is stale", "mark price unavailable",
+                    "mark price window is unstable"):
+            action, _order_id, _err, transient = event_handler._classify_close_result(
+                {"code": "STALE_MARK_PRICE", "message": msg})
+            self.assertEqual(action, "failed")
+            self.assertTrue(transient, f"STALE_MARK_PRICE ({msg!r}) must retry")
+
+    def test_unknown_terminal_code_not_transient(self):
+        action, _order_id, _err, transient = event_handler._classify_close_result(
+            {"code": "INVALID_ARGUMENT", "message": "bad qty"})
+        self.assertEqual(action, "failed")
+        self.assertFalse(transient)
+
+
 if __name__ == "__main__":
     unittest.main()

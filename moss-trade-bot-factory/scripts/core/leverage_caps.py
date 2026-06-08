@@ -48,6 +48,10 @@ ASSET_MAX_LEVERAGES = {
     "ORCL": 10,
     "SKHX": 10,
     "CBRS": 10,
+    # 2026-06-08: xyz HIP-3 equities (mirror backend symbols.go assetMaxLeverages)
+    "AAPL": 20,
+    "TSM": 10,
+    "SPCX": 5,
 }
 
 

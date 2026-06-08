@@ -4,7 +4,7 @@
   "tag": "v1.0.28",
   "asset_name": "data_cache-v1.0.28.tar.gz",
   "asset_url": "https://github.com/moss-site/moss-trade-bot-skills/releases/download/v1.0.28/data_cache-v1.0.28.tar.gz",
-  "archive_sha256": "42ee1649f885b52117e2ec4b3bbb922535fcabaa2bfba647f0879e593351e424",
+  "archive_sha256": "8e616256426f5085b5f93efbdac4b1af7b3d5af45fd294713e1035b3990952f1",
   "files": [
     {
       "path": "data_cache/ambush/events.csv",
@@ -559,6 +559,12 @@
       "last_timestamp": null
     },
     {
+      "path": "data_cache/hyperliquid_AAPLUSDC_15m_2025-11-21_199d.csv",
+      "sha256": "0d5c18f51b95c09f2975fbb663d5439590dda0c6cb5989c296b9eeb30e53242e",
+      "row_count": 19098,
+      "last_timestamp": "2026-06-08 12:30:00"
+    },
+    {
       "path": "data_cache/hyperliquid_ADAUSDC_15m_2025-10-06_148d.csv",
       "sha256": "48e277e85788290cf5cfaa853dcd7e362da3d9fdf92b738406a0e011f1eaf0d2",
       "row_count": 14209,
@@ -781,6 +787,12 @@
       "last_timestamp": "2026-05-18 09:00:00"
     },
     {
+      "path": "data_cache/hyperliquid_SPCXUSDC_15m_2026-05-17_22d.csv",
+      "sha256": "86a60e11ac0f20ad27a3858981905deead2384a46c9d9500b4c439f6edf72f3e",
+      "row_count": 2074,
+      "last_timestamp": "2026-06-08 12:30:00"
+    },
+    {
       "path": "data_cache/hyperliquid_SUIUSDC_15m_2025-10-06_148d.csv",
       "sha256": "27acda743e032a549b3d476d2f58cce6c98d22b7d0226b989373827915d5f31b",
       "row_count": 14209,
@@ -797,6 +809,12 @@
       "sha256": "db7522f9ab181944bf0041baf661aaf96816c125ffef7bd5f70f6b648c2c6e05",
       "row_count": 10505,
       "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_TSMUSDC_15m_2026-02-03_125d.csv",
+      "sha256": "15de82cd5d99a8160979a24ba66f6d08a0108f6e0bebde9f3682c8e08c1ba137",
+      "row_count": 11994,
+      "last_timestamp": "2026-06-08 12:30:00"
     },
     {
       "path": "data_cache/hyperliquid_UNIUSDC_15m_2025-10-06_148d.csv",

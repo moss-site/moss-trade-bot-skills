@@ -52,6 +52,10 @@ ASSET_MAX_LEVERAGES = {
     "AAPL": 20,
     "TSM": 10,
     "SPCX": 5,
+    # 2026-06-15: MSFT/MRVL/AVGO (xyz HIP-3 equities; MRVL+AVGO onlyIsolated on HL)
+    "MSFT": 20,
+    "MRVL": 10,
+    "AVGO": 10,
 }
 
 

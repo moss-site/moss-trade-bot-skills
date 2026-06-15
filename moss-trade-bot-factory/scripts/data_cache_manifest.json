@@ -4,7 +4,7 @@
   "tag": "v1.0.28",
   "asset_name": "data_cache-v1.0.28.tar.gz",
   "asset_url": "https://github.com/moss-site/moss-trade-bot-skills/releases/download/v1.0.28/data_cache-v1.0.28.tar.gz",
-  "archive_sha256": "8e616256426f5085b5f93efbdac4b1af7b3d5af45fd294713e1035b3990952f1",
+  "archive_sha256": "b3ffb428f8a935b96152428fa43a7e364a5e7eae2d49f653b7855d6beb5e8a46",
   "files": [
     {
       "path": "data_cache/ambush/events.csv",
@@ -833,6 +833,24 @@
       "sha256": "4bcacf9c55a1fe172f124c57f05f0b5512e6af37c44612dbac60edce90cd8833",
       "row_count": 13490,
       "last_timestamp": "2026-03-03 00:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_MSFTUSDC_15m_2025-11-19_208d.csv",
+      "sha256": "f4c0d99451eda1dde24c342712ca1de30e724e1c68979d91c0db0aed9323a501",
+      "row_count": 19950,
+      "last_timestamp": "2026-06-15 09:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_MRVLUSDC_15m_2026-05-04_42d.csv",
+      "sha256": "84dfc8cb691a79eece5994f3f7938c4a5b14ddb95ea018d20d82e05d145b9e52",
+      "row_count": 4004,
+      "last_timestamp": "2026-06-15 09:45:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_AVGOUSDC_15m_2026-06-03_12d.csv",
+      "sha256": "93e41c9e39cd275c8935ce756c64626a528ab38e29c2107cd6955931af0dc2fa",
+      "row_count": 1134,
+      "last_timestamp": "2026-06-15 09:45:00"
     }
   ]
 }

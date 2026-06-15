@@ -837,19 +837,19 @@
     {
       "path": "data_cache/hyperliquid_MSFTUSDC_15m_2025-11-19_208d.csv",
       "sha256": "f4c0d99451eda1dde24c342712ca1de30e724e1c68979d91c0db0aed9323a501",
-      "row_count": 19950,
+      "row_count": 19951,
       "last_timestamp": "2026-06-15 09:45:00"
     },
     {
       "path": "data_cache/hyperliquid_MRVLUSDC_15m_2026-05-04_42d.csv",
       "sha256": "84dfc8cb691a79eece5994f3f7938c4a5b14ddb95ea018d20d82e05d145b9e52",
-      "row_count": 4004,
+      "row_count": 4005,
       "last_timestamp": "2026-06-15 09:45:00"
     },
     {
       "path": "data_cache/hyperliquid_AVGOUSDC_15m_2026-06-03_12d.csv",
       "sha256": "93e41c9e39cd275c8935ce756c64626a528ab38e29c2107cd6955931af0dc2fa",
-      "row_count": 1134,
+      "row_count": 1135,
       "last_timestamp": "2026-06-15 09:45:00"
     }
   ]

@@ -21,11 +21,10 @@
 | 50x | SP500 |
 | 30x | XYZ100 |
 | 25x | GOLD · SILVER |
-| 20x | NVDA · CL · BRENTOIL · **AAPL** · **MSFT** |
-| 10x | TSLA · INTC · AMD · MU · SNDK · MSTR · CRCL · COIN · META · GOOGL · ORCL · SKHX · CBRS · **TSM** · **MRVL** · **AVGO** |
-| 5x  | **SPCX** |
+| 20x | NVDA · CL · BRENTOIL · **AAPL** · **MSFT** · **TSLA** · **META** · **GOOGL** |
+| 10x | INTC · AMD · MU · SNDK · MSTR · CRCL · COIN · ORCL · SKHX · CBRS · **TSM** · **MRVL** · **AVGO** · **SPCX** |
 
-> 上面两组合计 49 币种，与后端 `internal/domain/symbols.go : assetMaxLeverages` 一对一同步（2026-06-08 加入 AAPL/TSM/SPCX；2026-06-15 加入 MSFT 20x、MRVL 10x、AVGO 10x，取自 Hyperliquid xyz dex meta；MRVL/AVGO 在 HL 为 onlyIsolated）。
+> 上面两组合计 49 币种，与后端 `internal/domain/symbols.go : assetMaxLeverages` 一对一同步（2026-06-08 加入 AAPL/TSM/SPCX；2026-06-15 加入 MSFT 20x、MRVL 10x、AVGO 10x，取自 Hyperliquid xyz dex meta；MRVL/AVGO 在 HL 为 onlyIsolated）。2026-06-16 校正 4 个漂移：TSLA/META/GOOGL 10x→20x、SPCX 5x→10x（HL 已上调，经 xyz meta 核实）。
 
 ## 表外币种
 

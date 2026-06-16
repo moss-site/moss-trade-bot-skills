@@ -29,10 +29,14 @@ class NewXYZAssetsTest(unittest.TestCase):
     def test_leverage_caps(self):
         self.assertEqual(max_leverage_for_symbol("AAPLUSDC"), 20)
         self.assertEqual(max_leverage_for_symbol("TSMUSDC"), 10)
-        self.assertEqual(max_leverage_for_symbol("SPCXUSDC"), 5)
+        self.assertEqual(max_leverage_for_symbol("SPCXUSDC"), 10)  # 2026-06-16: HL 5->10
         self.assertEqual(max_leverage_for_symbol("MSFTUSDC"), 20)
         self.assertEqual(max_leverage_for_symbol("MRVLUSDC"), 10)
         self.assertEqual(max_leverage_for_symbol("AVGOUSDC"), 10)
+        # 2026-06-16: HL-sync — TSLA/META/GOOGL raised 10->20 (were stale)
+        self.assertEqual(max_leverage_for_symbol("TSLAUSDC"), 20)
+        self.assertEqual(max_leverage_for_symbol("METAUSDC"), 20)
+        self.assertEqual(max_leverage_for_symbol("GOOGLUSDC"), 20)
 
 
 if __name__ == "__main__":

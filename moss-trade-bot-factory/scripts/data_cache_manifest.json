@@ -4,7 +4,7 @@
   "tag": "v1.0.28",
   "asset_name": "data_cache-v1.0.28.tar.gz",
   "asset_url": "https://github.com/moss-site/moss-trade-bot-skills/releases/download/v1.0.28/data_cache-v1.0.28.tar.gz",
-  "archive_sha256": "23aa67634276b673aeb530ab4e7dd2cc50ac4f5dca387622bf12afc075bb5814",
+  "archive_sha256": "b71766b06026b87eb4b35b5a3762e13b389815563c50ace8261a6db8126c5be9",
   "files": [
     {
       "path": "data_cache/ambush/events.csv",

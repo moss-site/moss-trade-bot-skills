@@ -4,7 +4,7 @@
   "tag": "v1.0.28",
   "asset_name": "data_cache-v1.0.28.tar.gz",
   "asset_url": "https://github.com/moss-site/moss-trade-bot-skills/releases/download/v1.0.28/data_cache-v1.0.28.tar.gz",
-  "archive_sha256": "b71766b06026b87eb4b35b5a3762e13b389815563c50ace8261a6db8126c5be9",
+  "archive_sha256": "19adc47eef8c0f5d6ac01c3184bb12bc6303bf948f47082f28cc0f6c2ad1ccb9",
   "files": [
     {
       "path": "data_cache/ambush/events.csv",
@@ -853,10 +853,10 @@
       "last_timestamp": "2026-06-16 03:15:00"
     },
     {
-      "path": "data_cache/hyperliquid_MINIMAXUSDC_15m_2026-04-14_69d.csv",
-      "sha256": "2860a2f56e8b5dcde5f2af45e7052e53c67716fe692be405916d8a8736465d6d",
-      "row_count": 6638,
-      "last_timestamp": "2026-06-22 09:15:00"
+      "path": "data_cache/hyperliquid_ZHIPUUSDC_15m_2026-04-13_70d.csv",
+      "sha256": "ac1c0166c9a211004262ec3db92e1a3a77012760e4b155eb36a8e13bd01aada5",
+      "row_count": 6742,
+      "last_timestamp": "2026-06-22 11:00:00"
     }
   ]
 }

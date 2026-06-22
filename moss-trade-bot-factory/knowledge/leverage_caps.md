@@ -2,7 +2,7 @@
 
 来源：Hyperliquid `/info` meta，按 base asset 查表。`base_leverage` 和 `max_leverage` 都不得超过下表对应币种的 maxLeverage。Step 1 推断杠杆档位（保守 / 中性 / 激进 / 梭哈）后，**先按本表对应 symbol 的上限封顶，再写入参数**；超限不要静默截断，要在 Step 2 摘要中明确告知"已按上限 Nx 封顶"，让用户感知到 cap 存在。
 
-## 当前快照（50 币，2026-06-22 扩展 MINIMAX）
+## 当前快照（50 币，2026-06-22 扩展 ZHIPU）
 
 ### HyperCore 主板（23 个，USDC 报价）
 
@@ -22,9 +22,9 @@
 | 30x | XYZ100 |
 | 25x | GOLD · SILVER |
 | 20x | NVDA · CL · BRENTOIL · **AAPL** · **MSFT** · **TSLA** · **META** · **GOOGL** |
-| 10x | INTC · AMD · MU · SNDK · MSTR · CRCL · COIN · ORCL · SKHX · CBRS · **TSM** · **MRVL** · **AVGO** · **SPCX** · **MINIMAX** |
+| 10x | INTC · AMD · MU · SNDK · MSTR · CRCL · COIN · ORCL · SKHX · CBRS · **TSM** · **MRVL** · **AVGO** · **SPCX** · **ZHIPU** |
 
-> 上面两组合计 50 币种，与后端 `internal/domain/symbols.go : assetMaxLeverages` 一对一同步（2026-06-08 加入 AAPL/TSM/SPCX；2026-06-15 加入 MSFT 20x、MRVL 10x、AVGO 10x；2026-06-22 加入 MINIMAX 10x，数据源 Gate.io 永续合约 69d，取自 Hyperliquid xyz dex meta；MINIMAX 在 HL 为 onlyIsolated）。2026-06-16 校正 4 个漂移：TSLA/META/GOOGL 10x→20x、SPCX 5x→10x（HL 已上调，经 xyz meta 核实）。
+> 上面两组合计 50 币种，与后端 `internal/domain/symbols.go : assetMaxLeverages` 一对一同步（2026-06-08 加入 AAPL/TSM/SPCX；2026-06-15 加入 MSFT 20x、MRVL 10x、AVGO 10x；2026-06-22 加入 ZHIPU 10x，数据源 Gate.io 永续合约 70d，取自 Hyperliquid xyz dex meta；ZHIPU 在 HL 为 onlyIsolated）。2026-06-16 校正 4 个漂移：TSLA/META/GOOGL 10x→20x、SPCX 5x→10x（HL 已上调，经 xyz meta 核实）。
 
 ## 表外币种
 

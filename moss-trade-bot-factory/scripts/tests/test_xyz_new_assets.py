@@ -14,7 +14,7 @@ from core.local_costs import normalize_coin
 
 
 class NewXYZAssetsTest(unittest.TestCase):
-    """2026-06-08: AAPL/TSM/SPCX; 2026-06-15: MSFT/MRVL/AVGO; 2026-06-22: MINIMAX
+    """2026-06-08: AAPL/TSM/SPCX; 2026-06-15: MSFT/MRVL/AVGO; 2026-06-22: ZHIPU
     added as xyz HIP-3 equities. They must route to the xyz: namespace for HL
     coin lookups and carry their live leverage caps."""
 
@@ -25,7 +25,7 @@ class NewXYZAssetsTest(unittest.TestCase):
         self.assertEqual(normalize_coin("MSFTUSDC"), "xyz:MSFT")
         self.assertEqual(normalize_coin("MRVLUSDC"), "xyz:MRVL")
         self.assertEqual(normalize_coin("AVGOUSDC"), "xyz:AVGO")
-        self.assertEqual(normalize_coin("MINIMAXUSDC"), "xyz:MINIMAX")
+        self.assertEqual(normalize_coin("ZHIPUUSDC"), "xyz:ZHIPU")
 
     def test_leverage_caps(self):
         self.assertEqual(max_leverage_for_symbol("AAPLUSDC"), 20)
@@ -38,8 +38,8 @@ class NewXYZAssetsTest(unittest.TestCase):
         self.assertEqual(max_leverage_for_symbol("TSLAUSDC"), 20)
         self.assertEqual(max_leverage_for_symbol("METAUSDC"), 20)
         self.assertEqual(max_leverage_for_symbol("GOOGLUSDC"), 20)
-        # 2026-06-22: MINIMAX
-        self.assertEqual(max_leverage_for_symbol("MINIMAXUSDC"), 10)
+        # 2026-06-22: ZHIPU
+        self.assertEqual(max_leverage_for_symbol("ZHIPUUSDC"), 10)
 
 
 if __name__ == "__main__":

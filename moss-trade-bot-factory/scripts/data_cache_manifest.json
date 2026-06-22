@@ -851,6 +851,12 @@
       "sha256": "02e01d58a12412c81228ff7f3d78a39c962d7e00dd0c057532ebd26951b9ecaa",
       "row_count": 5433,
       "last_timestamp": "2026-06-16 03:15:00"
+    },
+    {
+      "path": "data_cache/hyperliquid_MINIMAXUSDC_15m_2026-04-14_69d.csv",
+      "sha256": "2860a2f56e8b5dcde5f2af45e7052e53c67716fe692be405916d8a8736465d6d",
+      "row_count": 6638,
+      "last_timestamp": "2026-06-22 09:15:00"
     }
   ]
 }

@@ -56,6 +56,8 @@ ASSET_MAX_LEVERAGES = {
     "MSFT": 20,
     "MRVL": 10,
     "AVGO": 10,
+    # 2026-06-22: MINIMAX (xyz HIP-3 equity; onlyIsolated on HL)
+    "MINIMAX": 10,
 }
 
 

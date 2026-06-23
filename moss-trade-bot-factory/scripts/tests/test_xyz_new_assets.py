@@ -30,7 +30,7 @@ class NewXYZAssetsTest(unittest.TestCase):
     def test_leverage_caps(self):
         self.assertEqual(max_leverage_for_symbol("AAPLUSDC"), 20)
         self.assertEqual(max_leverage_for_symbol("TSMUSDC"), 10)
-        self.assertEqual(max_leverage_for_symbol("SPCXUSDC"), 10)  # 2026-06-16: HL 5->10
+        self.assertEqual(max_leverage_for_symbol("SPCXUSDC"), 20)  # 2026-06-23: HL 10->20
         self.assertEqual(max_leverage_for_symbol("MSFTUSDC"), 20)
         self.assertEqual(max_leverage_for_symbol("MRVLUSDC"), 10)
         self.assertEqual(max_leverage_for_symbol("AVGOUSDC"), 10)

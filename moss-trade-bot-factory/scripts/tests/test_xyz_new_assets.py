@@ -26,6 +26,11 @@ class NewXYZAssetsTest(unittest.TestCase):
         self.assertEqual(normalize_coin("MRVLUSDC"), "xyz:MRVL")
         self.assertEqual(normalize_coin("AVGOUSDC"), "xyz:AVGO")
         self.assertEqual(normalize_coin("ZHIPUUSDC"), "xyz:ZHIPU")
+        # 2026-06-23: DRAM is xyz HIP-3 (Roundhill Memory ETF)
+        self.assertEqual(normalize_coin("DRAMUSDC"), "xyz:DRAM")
+        # 2026-06-23: ZEC/WLD are main-board crypto -> bare base, NOT xyz:
+        self.assertEqual(normalize_coin("ZECUSDC"), "ZEC")
+        self.assertEqual(normalize_coin("WLDUSDC"), "WLD")
 
     def test_leverage_caps(self):
         self.assertEqual(max_leverage_for_symbol("AAPLUSDC"), 20)
@@ -40,6 +45,10 @@ class NewXYZAssetsTest(unittest.TestCase):
         self.assertEqual(max_leverage_for_symbol("GOOGLUSDC"), 20)
         # 2026-06-22: ZHIPU
         self.assertEqual(max_leverage_for_symbol("ZHIPUUSDC"), 10)
+        # 2026-06-23: ZEC/WLD main-board (10x), DRAM xyz ETF (20x)
+        self.assertEqual(max_leverage_for_symbol("ZECUSDC"), 10)
+        self.assertEqual(max_leverage_for_symbol("WLDUSDC"), 10)
+        self.assertEqual(max_leverage_for_symbol("DRAMUSDC"), 20)
 
 
 if __name__ == "__main__":

@@ -58,6 +58,10 @@ ASSET_MAX_LEVERAGES = {
     "AVGO": 10,
     # 2026-06-22: ZHIPU (xyz HIP-3 equity; onlyIsolated on HL)
     "ZHIPU": 10,
+    # 2026-06-23: ZEC/WLD (main-board crypto, 10x); DRAM (xyz HIP-3 Roundhill Memory ETF, 20x; onlyIsolated)
+    "ZEC": 10,
+    "WLD": 10,
+    "DRAM": 20,
 }
 
 

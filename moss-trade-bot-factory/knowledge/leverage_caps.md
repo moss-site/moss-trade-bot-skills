@@ -2,29 +2,29 @@
 
 来源：Hyperliquid `/info` meta，按 base asset 查表。`base_leverage` 和 `max_leverage` 都不得超过下表对应币种的 maxLeverage。Step 1 推断杠杆档位（保守 / 中性 / 激进 / 梭哈）后，**先按本表对应 symbol 的上限封顶，再写入参数**；超限不要静默截断，要在 Step 2 摘要中明确告知"已按上限 Nx 封顶"，让用户感知到 cap 存在。
 
-## 当前快照（50 币，2026-06-22 扩展 ZHIPU）
+## 当前快照（53 币，2026-06-23 扩展 ZEC/WLD/DRAM）
 
-### HyperCore 主板（23 个，USDC 报价）
+### HyperCore 主板（25 个，USDC 报价）
 
 | maxLeverage | 币种 |
 |---|---|
 | 40x | BTC |
 | 25x | ETH |
 | 20x | SOL · XRP |
-| 10x | BNB · APT · AVAX · BCH · DOGE · DOT · LINK · LTC · NEAR · SUI · TRX · UNI · ADA · ARB · **HYPE** |
+| 10x | BNB · APT · AVAX · BCH · DOGE · DOT · LINK · LTC · NEAR · SUI · TRX · UNI · ADA · ARB · **HYPE** · **ZEC** · **WLD** |
 | 5x  | ATOM · FIL · HBAR · OP |
 
-### xyz HIP-3 builder（27 个，USDC 报价；后端 normalize 自动加 `xyz:` 前缀路由）
+### xyz HIP-3 builder（28 个，USDC 报价；后端 normalize 自动加 `xyz:` 前缀路由）
 
 | maxLeverage | 币种 |
 |---|---|
 | 50x | SP500 |
 | 30x | XYZ100 |
 | 25x | GOLD · SILVER |
-| 20x | NVDA · CL · BRENTOIL · **AAPL** · **MSFT** · **TSLA** · **META** · **GOOGL** · **SPCX** |
+| 20x | NVDA · CL · BRENTOIL · **AAPL** · **MSFT** · **TSLA** · **META** · **GOOGL** · **SPCX** · **DRAM** |
 | 10x | INTC · AMD · MU · SNDK · MSTR · CRCL · COIN · ORCL · SKHX · CBRS · **TSM** · **MRVL** · **AVGO** · **ZHIPU** |
 
-> 上面两组合计 50 币种，与后端 `internal/domain/symbols.go : assetMaxLeverages` 一对一同步（2026-06-08 加入 AAPL/TSM/SPCX；2026-06-15 加入 MSFT 20x、MRVL 10x、AVGO 10x；2026-06-22 加入 ZHIPU 10x，数据源 Gate.io 永续合约 70d，取自 Hyperliquid xyz dex meta；ZHIPU 在 HL 为 onlyIsolated）。2026-06-16 校正 4 个漂移：TSLA/META/GOOGL 10x→20x、SPCX 5x→10x；2026-06-23 SPCX 10x→20x（HL 已上调，经 xyz meta 核实）。
+> 上面两组合计 53 币种，与后端 `internal/domain/symbols.go : assetMaxLeverages` 一对一同步（2026-06-08 加入 AAPL/TSM/SPCX；2026-06-15 加入 MSFT 20x、MRVL 10x、AVGO 10x；2026-06-22 加入 ZHIPU 10x，数据源 Gate.io 永续合约 70d，取自 Hyperliquid xyz dex meta；ZHIPU 在 HL 为 onlyIsolated）。2026-06-16 校正 4 个漂移：TSLA/META/GOOGL 10x→20x、SPCX 5x→10x；2026-06-23 SPCX 10x→20x（HL 已上调，经 xyz meta 核实）。2026-06-23 加入 ZEC 10x、WLD 10x（主板 crypto）、DRAM 20x（xyz HIP-3，Roundhill Memory ETF，idx=65，onlyIsolated），均经 Hyperliquid meta 核实。
 
 ## 表外币种
 

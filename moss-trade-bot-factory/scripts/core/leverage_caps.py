@@ -51,7 +51,7 @@ ASSET_MAX_LEVERAGES = {
     # 2026-06-08: xyz HIP-3 equities (mirror backend symbols.go assetMaxLeverages)
     "AAPL": 20,
     "TSM": 10,
-    "SPCX": 10,
+    "SPCX": 20,
     # 2026-06-15: MSFT/MRVL/AVGO (xyz HIP-3 equities; MRVL+AVGO onlyIsolated on HL)
     "MSFT": 20,
     "MRVL": 10,

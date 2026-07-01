@@ -578,6 +578,9 @@ def simulate_position(
                 str(pd.Timestamp(entry_time)), str(pd.Timestamp(bars[i]["ts"])),
             )
 
+    # Fell through the loop without any close firing — NOT max_hold (genuine
+    # max_hold fires in-loop at i == max_hold_bars). This means the dataset ran
+    # out of bars first, so label it insufficient_data (mirrors Go harness).
     last_close = float(bars[-1]["close"])
     cost = _apply_trade_costs(
         side, raw_entry, last_close, entry_time, pd.Timestamp(bars[-1]["ts"]),
@@ -585,7 +588,7 @@ def simulate_position(
     )
     return TradeOutcome(
         side, cost["entry_price"], cost["exit_price"], cost["pnl_pct"],
-        "max_hold", len(bars), raw_entry, last_close,
+        "insufficient_data", len(bars), raw_entry, last_close,
         cost["raw_pnl_pct"], cost["gross_pnl_pct"], cost["depth_cost_pct"],
         cost["trading_fee_pct"], cost["funding_fee_pct"],
         cost["entry_fee_pct"], cost["exit_fee_pct"], cost["depth_filled_ratio"],

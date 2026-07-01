@@ -22,7 +22,11 @@ import os
 from decimal import Decimal, ROUND_HALF_UP
 
 
-CURRENT_HARNESS_VERSION = "v1"
+# v2 (R4 BT-1/BT-2): deferred opens reconfirm at the wake bar and the close
+# cascade runs on the full pre-trigger-inclusive 96-bar window — both change
+# final_wallet vs v1 for the same params. Must stay in lockstep with the Go
+# CurrentHarnessVersion (backtest/fingerprint.go) or the server refuses to verify.
+CURRENT_HARNESS_VERSION = "v2"
 
 
 def canonical(

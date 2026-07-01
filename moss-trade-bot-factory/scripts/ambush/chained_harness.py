@@ -48,6 +48,8 @@ from ambush.backtest import (  # noqa: E402
     load_event_dataset,
     load_klines_for_base,
     klines_after_trigger,
+    klines_window_ending_at,
+    decide_from_window,
     simulate_position,
     _apply_trade_costs,
     _sl_atr_mult_or_default,
@@ -598,6 +600,17 @@ class ChainedHarness:
             if delay_bars > 0:
                 raw_entry = float(delayed_bars[0]["open"])
                 entry_ts = _pd_ts_to_dt(delayed_bars[0]["ts"])
+                # BT-1: mirror live deferred reconfirm (event_handler._run_deferred_open
+                # / Go decideFromBars). Re-decide at the wake bar over the 96-bar
+                # window ending there (pre-trigger history included), and expire the
+                # deferred open on a side flip or too-few-bars — live expired_recompute.
+                fresh_side = decide_from_window(
+                    klines_window_ending_at(klines_df, pd.Timestamp(delayed_bars[0]["ts"]), 96),
+                    self.p.direction,
+                )
+                if fresh_side is None or fresh_side != dec.side:
+                    state.record_skip(ev, "expired_recompute")
+                    continue
             else:
                 raw_entry = ev.price_at_trigger
                 entry_ts = ev.trigger_ts
@@ -616,6 +629,7 @@ class ChainedHarness:
                 max_hold_bars=max_hold_bars,
                 sl_atr_mult=_sl_atr_mult_or_default(float(side_params.sl_atr_mult), dec.side),
                 direction=self.p.direction,
+                klines_full=klines_df,
             )
 
             # Re-run _apply_trade_costs to get the cost dict (outcome is a

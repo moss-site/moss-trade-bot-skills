@@ -442,6 +442,7 @@ def simulate_position(
     max_hold_bars: int,
     sl_atr_mult: float,
     direction: str,
+    klines_full: Optional[pd.DataFrame] = None,
 ) -> TradeOutcome:
     """
     用 backend/live executor 同口径 close cascade 模拟一次仓位演化。
@@ -468,10 +469,20 @@ def simulate_position(
         limit = max_hold_bars + 1
 
     for i in range(limit):
-        lo = i - 95
-        if lo < 0:
-            lo = 0
-        window = bars[lo : i + 1]
+        # BT-2: the close cascade (ATR stop + signal_reverse features) must run on
+        # the SAME rolling 96-bar window the live executor fetches each tick
+        # (executor/close.py fetchBars(base,96)), which includes ~24h of pre-trigger
+        # history. The post-trigger-only window left the first ~14 bars (3.5h) with
+        # <15 bars (no stop-loss) and made ATR reflect only the growing post-trigger
+        # window. When klines_full is provided, pull the real window ending at this
+        # bar (mirrors Go harness ev.KlinesWindowEndingAt); else fall back.
+        if klines_full is not None:
+            window = klines_window_ending_at(klines_full, pd.Timestamp(bars[i]["ts"]), 96)
+        else:
+            lo = i - 95
+            if lo < 0:
+                lo = 0
+            window = bars[lo : i + 1]
         if len(window) < 15:
             continue
         last_close = float(bars[i]["close"])
@@ -604,12 +615,41 @@ def load_klines_for_base(data_dir: Path, base: str) -> Optional[pd.DataFrame]:
     df["ts"] = pd.to_datetime(df["timestamp"], utc=True)
     if df["ts"].dt.tz is not None:
         df["ts"] = df["ts"].dt.tz_convert(None)
+    # Sort ascending by ts to mirror Go loadKlines' defensive sort, so the rolling
+    # window helpers (.head/.tail) are order-correct regardless of CSV row order.
+    df = df.sort_values("ts").reset_index(drop=True)
     return df
 
 
 def klines_after_trigger(klines: pd.DataFrame, trigger_ts: pd.Timestamp, max_bars: int) -> list[dict]:
     after = klines[klines["ts"] > trigger_ts].head(max_bars)
     return after[["ts", "open", "high", "low", "close"]].to_dict("records")
+
+
+def klines_window_ending_at(klines: pd.DataFrame, end_ts: pd.Timestamp, max_bars: int) -> list[dict]:
+    """Mirror Go Event.KlinesWindowEndingAt: up to max_bars bars with ts <= end_ts
+    (ascending), INCLUDING pre-trigger history — the rolling window the live
+    executor sees via fetchBars(base, 96). klines is sorted ascending, so .tail
+    yields the last max_bars up to and including end_ts."""
+    win = klines[klines["ts"] <= end_ts]
+    if max_bars > 0:
+        win = win.tail(max_bars)
+    return win[["ts", "open", "high", "low", "close"]].to_dict("records")
+
+
+def decide_from_window(window: list[dict], direction: str) -> Optional[str]:
+    """Mirror Go decideFromBars / live deferred reconfirm (executor/deferred.py):
+    recompute features over a bar window and return the decided side, or None when
+    the window is too small (<15 bars) to compute features — live treats that as
+    'recompute unavailable' and expires the deferred open."""
+    if len(window) < 15:
+        return None
+    try:
+        f = features.compute_features(window)
+    except ValueError:
+        return None
+    side, _ = decide_for_features(f["surge_15m"], f["rsi_14"], f["chg_24h_pct"], direction)
+    return side
 
 
 # ===== 主回测循环 =====
@@ -701,6 +741,16 @@ def run_backtest(
         delayed_bars = bars_after[delay_bars:]
         entry_price = delayed_bars[0]["open"] if delay_bars > 0 else ev["trigger_price"]
         entry_time = pd.Timestamp(delayed_bars[0]["ts"]) if delay_bars > 0 else ev["trigger_ts"]
+        if delay_bars > 0:
+            # BT-1: mirror live deferred reconfirm — re-decide at the wake bar over
+            # the 96-bar window ending there; expire on side-flip / too-few-bars.
+            fresh_side = decide_from_window(
+                klines_window_ending_at(klines, pd.Timestamp(delayed_bars[0]["ts"]), 96),
+                direction,
+            )
+            if fresh_side is None or fresh_side != decision:
+                skip_reasons["expired_recompute"] = skip_reasons.get("expired_recompute", 0) + 1
+                continue
         outcome = simulate_position(
             delayed_bars,
             entry_price,
@@ -713,6 +763,7 @@ def run_backtest(
             max_hold_bars,
             sl_atr_mult,
             direction,
+            klines_full=klines,
         )
         leverage = lev
         trades.append({

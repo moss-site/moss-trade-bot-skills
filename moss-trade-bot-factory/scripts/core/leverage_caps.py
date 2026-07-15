@@ -66,6 +66,9 @@ ASSET_MAX_LEVERAGES = {
     # SKHY != SKHX above: 1 ADS = 1/10 of the KRX:000660 common that SKHX tracks.
     "SMSN": 10,
     "SKHY": 10,
+    # 2026-07-15: CXMT (长鑫存储 / ChangXin Memory, SSE STAR 688825) — xyz PRE-IPO perp.
+    # Cap is 5x, LOWER than every other xyz equity (HL: onlyIsolated, marginTable 5).
+    "CXMT": 5,
 }
 
 

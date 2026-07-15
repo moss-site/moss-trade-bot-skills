@@ -194,6 +194,11 @@ class _TradeState:
     current_qty: Decimal
     max_qty: Decimal
     entry_margin: Decimal
+    # Peak margin the trade ever employed. entry_margin tracks the *current*
+    # position and therefore shrinks on a partial close, but gross_realized_pnl
+    # keeps accumulating over the whole position's life — so pnl_pct must divide
+    # by the peak, not by whatever sliver happens to be left at the final fill.
+    max_margin: Decimal = Decimal(0)
     gross_realized_pnl: Decimal = Decimal(0)
     entry_fee_paid: Decimal = Decimal(0)
     exit_fee_paid: Decimal = Decimal(0)
@@ -223,13 +228,18 @@ def _build_open_trade(*, direction, open_side, entry_idx, entry_time, entry_pric
     return _TradeState(
         direction=direction, open_side=open_side, entry_idx=entry_idx,
         entry_time=entry_time, entry_price=d_price, leverage=max(1, int(leverage)),
-        current_qty=d_qty, max_qty=d_qty, entry_margin=margin, entry_fee_paid=d_fee,
+        current_qty=d_qty, max_qty=d_qty, entry_margin=margin, max_margin=margin,
+        entry_fee_paid=d_fee,
     )
 
 
 def _finalize_trade(trade: _TradeState, *, exit_idx, exit_time, exit_price, exit_reason, df) -> Trade:
     d_pnl = trade.gross_realized_pnl - trade.entry_fee_paid - trade.exit_fee_paid + trade.funding_fee_paid
-    d_margin = trade.entry_margin
+    # Divide by the peak margin employed, not by trade.entry_margin: a partial
+    # close shrinks entry_margin to the remaining sliver while gross_realized_pnl
+    # still covers the whole position, which inflated pnl_pct by the scale-down
+    # ratio (a 90% partial close made pnl_pct 10x too large).
+    d_margin = max(trade.max_margin, trade.entry_margin)
     d_pnl_pct = trade.gross_realized_pnl / d_margin if d_margin > 0 else Decimal(0)
     d_max_qty = max(trade.max_qty, trade.current_qty)
     return Trade(
@@ -386,6 +396,7 @@ def _apply_fill(state, open_trade, *, side, qty, fill_price, requested_leverage,
             open_trade.max_qty = max(open_trade.max_qty, new_net.copy_abs())
             open_trade.leverage = state.leverage
             open_trade.entry_margin = new_net.copy_abs() * state.entry_price / max(1, state.leverage)
+            open_trade.max_margin = max(open_trade.max_margin, open_trade.entry_margin)
             open_trade.entry_fee_paid += d_fee
         return open_trade, completed
 

@@ -62,6 +62,10 @@ ASSET_MAX_LEVERAGES = {
     "ZEC": 10,
     "WLD": 10,
     "DRAM": 20,
+    # 2026-07-15: SMSN (Samsung, tracks KRX:005930) + SKHY (SK Hynix ADS, Nasdaq:SKHY).
+    # SKHY != SKHX above: 1 ADS = 1/10 of the KRX:000660 common that SKHX tracks.
+    "SMSN": 10,
+    "SKHY": 10,
 }
 
 

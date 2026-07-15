@@ -31,6 +31,7 @@ _XYZ_BASE_ASSETS = frozenset({
     "AAPL", "TSM", "SPCX",
     "MSFT", "MRVL", "AVGO",
     "ZHIPU", "DRAM",
+    "SMSN", "SKHY",
 })
 
 

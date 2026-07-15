@@ -77,11 +77,57 @@ class PnlPctMarginBasisTest(unittest.TestCase):
 
     def test_increase_then_close_uses_peak_margin(self):
         # Increase path already grows entry_margin; lock that it stays correct.
+        # NOTE: this case never partially closes, so it does NOT pin the
+        # max_margin bookkeeping on the increase branch — see
+        # test_increase_then_partial_close_then_close for that.
         state = _AccountState(wallet=Decimal(10000))
         ot, _ = _fill(state, None, "buy", 50, 100, "open_long")
         ot, _ = _fill(state, ot, "buy", 50, 100, "increase_long")
         self.assertEqual(ot.entry_margin, Decimal(1000))  # 100 @ 100 / 10x
         ot, done = _fill(state, ot, "sell", 100, 110, "close_long")
+        self.assertAlmostEqual(done[0].pnl_pct, 1.0, places=9)
+
+    def test_increase_then_partial_close_then_close(self):
+        """Pins the max_margin update on the INCREASE branch.
+
+        Regression guard: deleting `open_trade.max_margin = max(...)` from the
+        same-direction branch leaves every other test green, but makes this case
+        report pnl_pct 2.0 instead of 1.0 — the peak (1000) is forgotten and the
+        post-open margin (500) becomes the divisor.
+        """
+        state = _AccountState(wallet=Decimal(10000))
+        ot, _ = _fill(state, None, "buy", 50, 100, "open_long")     # margin 500
+        ot, _ = _fill(state, ot, "buy", 50, 100, "increase_long")    # peak margin 1000
+        self.assertEqual(ot.max_margin, Decimal(1000))
+        ot, _ = _fill(state, ot, "sell", 90, 110, "reduce_long")     # entry_margin shrinks to 100
+        ot, done = _fill(state, ot, "sell", 10, 110, "close_long")
+        self.assertEqual(len(done), 1)
+        # realized = (110-100)*100 = 1000 on a peak margin of 1000 -> 1.0
+        self.assertAlmostEqual(done[0].pnl_pct, 1.0, places=9)
+        self.assertAlmostEqual(done[0].margin, 1000.0, places=6)
+
+    def test_short_partial_close_then_close(self):
+        """Same defect, short side. The realized-PnL branch differs by sign, and
+        every other test in this file is a long."""
+        state = _AccountState(wallet=Decimal(10000))
+        ot, _ = _fill(state, None, "sell", 100, 100, "open_short")   # margin 1000
+        self.assertEqual(ot.entry_margin, Decimal(1000))
+        ot, done = _fill(state, ot, "buy", 90, 90, "reduce_short")   # realized (100-90)*90 = 900
+        self.assertEqual(done, [])
+        self.assertEqual(ot.gross_realized_pnl, Decimal(900))
+        ot, done = _fill(state, ot, "buy", 10, 90, "close_short")    # +100 -> 1000 total
+        self.assertAlmostEqual(done[0].pnl_pct, 1.0, places=9)
+        self.assertAlmostEqual(done[0].margin, 1000.0, places=6)
+
+    def test_multiple_partial_closes(self):
+        """Peak must survive repeated scale-downs, not just one."""
+        state = _AccountState(wallet=Decimal(10000))
+        ot, _ = _fill(state, None, "buy", 100, 100, "open_long")     # margin 1000
+        for _ in range(3):
+            ot, done = _fill(state, ot, "sell", 30, 110, "reduce_long")
+            self.assertEqual(done, [])
+        ot, done = _fill(state, ot, "sell", 10, 110, "close_long")
+        # realized = (110-100)*100 = 1000 over peak margin 1000
         self.assertAlmostEqual(done[0].pnl_pct, 1.0, places=9)
 
 

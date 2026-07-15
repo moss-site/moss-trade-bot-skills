@@ -13,10 +13,10 @@ if SCRIPTS not in sys.path:
 from core.backtest import _AccountState, _apply_fill
 
 
-def _fill(state, open_trade, side, qty, price, action):
+def _fill(state, open_trade, side, qty, price, action, fee_rate=0.0):
     return _apply_fill(
         state, open_trade, side=side, qty=qty, fill_price=price,
-        requested_leverage=10, fee_rate=0.0, fill_idx=0, fill_time=None,
+        requested_leverage=10, fee_rate=fee_rate, fill_idx=0, fill_time=None,
         action=action, df=None,
     )
 
@@ -86,6 +86,34 @@ class PnlPctMarginBasisTest(unittest.TestCase):
         self.assertEqual(ot.entry_margin, Decimal(1000))  # 100 @ 100 / 10x
         ot, done = _fill(state, ot, "sell", 100, 110, "close_long")
         self.assertAlmostEqual(done[0].pnl_pct, 1.0, places=9)
+
+    def test_pnl_pct_numerator_is_GROSS_not_net_at_production_fee_rate(self):
+        """pnl_pct's numerator must be gross_realized_pnl, NOT the fee-net pnl.
+
+        This is the test test_margin_times_pnl_pct_reconstructs_gross_pnl was
+        meant to be: at fee_rate=0.0 gross == net, so that test is blind to the
+        distinction and the gross->net mutant survives it. Production runs at
+        LOCAL_DEFAULT_TAKER_FEE_RATE = 0.00045 (core/local_costs.py).
+
+        Why it matters: the Go side reconstructs the realized amount SOLELY as
+        Margin * PnlPct (repository/backtest_canonical_persistence.go:289) and
+        books it into the canonical ledger, while internal/backtest/
+        synthetic_costs.go charges its OWN taker fee on top. If pnl_pct ever
+        carried fees in its numerator, those fees would be counted twice.
+        """
+        fee = 0.00045
+        state = _AccountState(wallet=Decimal(10000))
+        ot, _ = _fill(state, None, "buy", 100, 100, "open_long", fee_rate=fee)
+        ot, done = _fill(state, ot, "sell", 100, 110, "close_long", fee_rate=fee)
+        t = done[0]
+
+        # Fees must actually be non-zero, or this test degenerates into the old one.
+        self.assertGreater(t.entry_fee_paid + t.exit_fee_paid, 0.0)
+        self.assertNotAlmostEqual(t.gross_pnl, t.pnl, places=6)  # gross != net here
+
+        # The Go contract: margin * pnl_pct rebuilds GROSS, never net.
+        self.assertAlmostEqual(t.margin * t.pnl_pct, t.gross_pnl, places=6)
+        self.assertNotAlmostEqual(t.margin * t.pnl_pct, t.pnl, places=6)
 
     def test_increase_then_partial_close_then_close(self):
         """Pins the max_margin update on the INCREASE branch.

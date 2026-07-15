@@ -60,6 +60,21 @@ class PnlPctMarginBasisTest(unittest.TestCase):
         # realized = 1000, margin = 1000 -> 1.0
         self.assertAlmostEqual(done[0].pnl_pct, 1.0, places=9)
 
+    def test_margin_times_pnl_pct_reconstructs_gross_pnl(self):
+        """Contract with the Go consumer: it rebuilds absolute PnL as
+        margin * pnl_pct (repository/backtest_canonical_persistence.go). That
+        product must equal gross_pnl regardless of how the margin basis is
+        chosen — this is why the old inflated pnl_pct still produced the right
+        absolute PnL, and why the fix must not break it.
+        """
+        state = _AccountState(wallet=Decimal(10000))
+        ot, _ = _fill(state, None, "buy", 100, 100, "open_long")
+        ot, _ = _fill(state, ot, "sell", 90, 110, "reduce_long")
+        ot, done = _fill(state, ot, "sell", 10, 110, "close_long")
+        t = done[0]
+        self.assertAlmostEqual(t.margin * t.pnl_pct, t.gross_pnl, places=6)
+        self.assertAlmostEqual(t.gross_pnl, 1000.0, places=6)
+
     def test_increase_then_close_uses_peak_margin(self):
         # Increase path already grows entry_margin; lock that it stays correct.
         state = _AccountState(wallet=Decimal(10000))

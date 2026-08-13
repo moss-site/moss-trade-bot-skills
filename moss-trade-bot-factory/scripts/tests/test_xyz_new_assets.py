@@ -36,6 +36,8 @@ class NewXYZAssetsTest(unittest.TestCase):
         self.assertEqual(normalize_coin("SKHYUSDC"), "xyz:SKHY")
         self.assertEqual(normalize_coin("SKHXUSDC"), "xyz:SKHX")
         self.assertEqual(normalize_coin("CXMTUSDC"), "xyz:CXMT")
+        self.assertEqual(normalize_coin("CRWVUSDC"), "xyz:CRWV")
+        self.assertEqual(normalize_coin("NBISUSDC"), "xyz:NBIS")
 
     def test_leverage_caps(self):
         self.assertEqual(max_leverage_for_symbol("AAPLUSDC"), 20)
@@ -57,8 +59,11 @@ class NewXYZAssetsTest(unittest.TestCase):
         # 2026-07-15: SMSN / SKHY both 10x
         self.assertEqual(max_leverage_for_symbol("SMSNUSDC"), 10)
         self.assertEqual(max_leverage_for_symbol("SKHYUSDC"), 10)
-        # 2026-07-15: CXMT 只有 5x —— 比其他 xyz 股票都低，别当成 10x
-        self.assertEqual(max_leverage_for_symbol("CXMTUSDC"), 5)
+        # 2026-08-13: CXMT 5x -> 10x (HL 转换后上调)
+        self.assertEqual(max_leverage_for_symbol("CXMTUSDC"), 10)
+        # 2026-08-13: CRWV / NBIS 10x
+        self.assertEqual(max_leverage_for_symbol("CRWVUSDC"), 10)
+        self.assertEqual(max_leverage_for_symbol("NBISUSDC"), 10)
 
 
 if __name__ == "__main__":

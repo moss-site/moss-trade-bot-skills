@@ -2,7 +2,7 @@
 
 来源：Hyperliquid `/info` meta，按 base asset 查表。`base_leverage` 和 `max_leverage` 都不得超过下表对应币种的 maxLeverage。Step 1 推断杠杆档位（保守 / 中性 / 激进 / 梭哈）后，**先按本表对应 symbol 的上限封顶，再写入参数**；超限不要静默截断，要在 Step 2 摘要中明确告知"已按上限 Nx 封顶"，让用户感知到 cap 存在。
 
-## 当前快照（56 币，2026-07-15 扩展 SMSN/SKHY/CXMT）
+## 当前快照（58 币，2026-08-13 扩展 CRWV/NBIS）
 
 ### HyperCore 主板（25 个，USDC 报价）
 
@@ -14,7 +14,7 @@
 | 10x | BNB · APT · AVAX · BCH · DOGE · DOT · LINK · LTC · NEAR · SUI · TRX · UNI · ADA · ARB · **HYPE** · **ZEC** · **WLD** |
 | 5x  | ATOM · FIL · HBAR · OP |
 
-### xyz HIP-3 builder（31 个，USDC 报价；后端 normalize 自动加 `xyz:` 前缀路由）
+### xyz HIP-3 builder（33 个，USDC 报价；后端 normalize 自动加 `xyz:` 前缀路由）
 
 | maxLeverage | 币种 |
 |---|---|
@@ -22,10 +22,9 @@
 | 30x | XYZ100 |
 | 25x | GOLD · SILVER |
 | 20x | NVDA · CL · BRENTOIL · **AAPL** · **MSFT** · **TSLA** · **META** · **GOOGL** · **SPCX** · **DRAM** |
-| 10x | INTC · AMD · MU · SNDK · MSTR · CRCL · COIN · ORCL · SKHX · CBRS · **TSM** · **MRVL** · **AVGO** · **ZHIPU** · **SMSN** · **SKHY** |
-| **5x** | **CXMT** ← xyz 里唯一 5x，别按 10x 写 |
+| 10x | INTC · AMD · MU · SNDK · MSTR · CRCL · COIN · ORCL · SKHX · CBRS · **TSM** · **MRVL** · **AVGO** · **ZHIPU** · **SMSN** · **SKHY** · **CXMT** · **CRWV** · **NBIS** |
 
-> 上面两组合计 56 币种，与后端 `internal/domain/symbols.go : assetMaxLeverages` 一对一同步（2026-06-08 加入 AAPL/TSM/SPCX；2026-06-15 加入 MSFT 20x、MRVL 10x、AVGO 10x；2026-06-22 加入 ZHIPU 10x，数据源 Gate.io 永续合约 70d，取自 Hyperliquid xyz dex meta；ZHIPU 在 HL 为 onlyIsolated）。2026-06-16 校正 4 个漂移：TSLA/META/GOOGL 10x→20x、SPCX 5x→10x；2026-06-23 SPCX 10x→20x（HL 已上调，经 xyz meta 核实）。2026-06-23 加入 ZEC 10x、WLD 10x（主板 crypto）、DRAM 20x（xyz HIP-3，Roundhill Memory ETF，idx=65，onlyIsolated），均经 Hyperliquid meta 核实。
+> 上面两组合计 58 币种，与后端 `internal/domain/symbols.go : assetMaxLeverages` 一对一同步（2026-06-08 加入 AAPL/TSM/SPCX；2026-06-15 加入 MSFT 20x、MRVL 10x、AVGO 10x；2026-06-22 加入 ZHIPU 10x，数据源 Gate.io 永续合约 70d，取自 Hyperliquid xyz dex meta；ZHIPU 在 HL 为 onlyIsolated）。2026-06-16 校正 4 个漂移：TSLA/META/GOOGL 10x→20x、SPCX 5x→10x；2026-06-23 SPCX 10x→20x（HL 已上调，经 xyz meta 核实）。2026-06-23 加入 ZEC 10x、WLD 10x（主板 crypto）、DRAM 20x（xyz HIP-3，Roundhill Memory ETF，idx=65，onlyIsolated），均经 Hyperliquid meta 核实。
 
 ## 表外币种
 
@@ -44,7 +43,6 @@
 > ⚠️ **SKHY ≠ SKHX**：SKHX 跟踪 SK 海力士**普通股** KRX:000660，SKHY 跟踪其 **ADS**，1 ADS = 1/10 普通股，且 ADR 长期存在大幅且时变的溢价（2026-07 上市首周从平价扩到 +29%）。两者是**不同标的**，不可互相代理。
 > ⚠️ SKHY 的回测数据集 88% 由正股/10 比例回调合成（原生历史不足），详见后端 `share_for_local_run/data_cache/PROVENANCE_SKHY.md`。
 
-> **2026-07-15 加入 CXMT 5x（长鑫存储，SSE 科创板 688825）。⚠️ 三个特别提醒：**
-> 1. **杠杆只有 5x** —— 是 xyz 里最低的（HL onlyIsolated + marginTable 5），不要按其他股票的 10x 写。
-> 2. **它是 Pre-IPO 永续**：标的至今未上市（IPO 定价 ¥8.66，2026-07-16 申购，**2026-07-27 首日交易**）。xyz 用自有订单簿定价、**无外部喂价**，是 102 个 xyz 市场里唯一 mark 显著偏离 oracle 的。
-> 3. **回测数据几乎没有**：2026-07-15 上市，当日仅约 23 根 15m K 线（预热窗口要 1200 根）。回测结果无统计意义，**别用于参数优化**。7-27 转换后需重建数据集。
+> **CXMT（长鑫存储，SSE 科创板 688825）历史：** 2026-07-15 作为 xyz **Pre-IPO 永续**上市，杠杆 5x、无外部喂价、几乎无回测数据。底层 **2026-07-27 IPO 首日交易**后合约转为标准，HL 于 **2026-08-13 把杠杆上调到 10x**（本表已更新为 10x）。现已有原生数据可回测。
+
+> **2026-08-13**：加入 CRWV 10x（CoreWeave）、NBIS 10x（Nebius），均 xyz HIP-3、52 天原生数据、经 Hyperliquid meta 核实。同日将 **CXMT 从 5x 上调到 10x** —— 其底层 2026-07-27 IPO 首日交易后，HL 把合约从 pre-IPO 转为标准并上调杠杆（漂移修正，同 SPCX 之前 10→20 的处理）。

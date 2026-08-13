@@ -66,9 +66,13 @@ ASSET_MAX_LEVERAGES = {
     # SKHY != SKHX above: 1 ADS = 1/10 of the KRX:000660 common that SKHX tracks.
     "SMSN": 10,
     "SKHY": 10,
-    # 2026-07-15: CXMT (长鑫存储 / ChangXin Memory, SSE STAR 688825) — xyz PRE-IPO perp.
-    # Cap is 5x, LOWER than every other xyz equity (HL: onlyIsolated, marginTable 5).
-    "CXMT": 5,
+    # 2026-07-15: CXMT (长鑫存储 / ChangXin Memory, SSE STAR 688825). Listed as a
+    # xyz pre-IPO perp at 5x; HL raised it to 10x on 2026-08-13 after the underlying
+    # began trading (2026-07-27 IPO) and the contract converted to standard.
+    "CXMT": 10,
+    # 2026-08-13: CRWV (CoreWeave) + NBIS (Nebius), xyz HIP-3 equities, 10x
+    "CRWV": 10,
+    "NBIS": 10,
 }
 
 

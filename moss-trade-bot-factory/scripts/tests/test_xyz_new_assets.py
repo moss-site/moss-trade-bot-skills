@@ -38,6 +38,8 @@ class NewXYZAssetsTest(unittest.TestCase):
         self.assertEqual(normalize_coin("CXMTUSDC"), "xyz:CXMT")
         self.assertEqual(normalize_coin("CRWVUSDC"), "xyz:CRWV")
         self.assertEqual(normalize_coin("NBISUSDC"), "xyz:NBIS")
+        # 2026-08-19: UNITREE (Unitree Robotics)
+        self.assertEqual(normalize_coin("UNITREEUSDC"), "xyz:UNITREE")
 
     def test_leverage_caps(self):
         self.assertEqual(max_leverage_for_symbol("AAPLUSDC"), 20)
@@ -64,6 +66,8 @@ class NewXYZAssetsTest(unittest.TestCase):
         # 2026-08-13: CRWV / NBIS 10x
         self.assertEqual(max_leverage_for_symbol("CRWVUSDC"), 10)
         self.assertEqual(max_leverage_for_symbol("NBISUSDC"), 10)
+        # 2026-08-19: UNITREE 10x
+        self.assertEqual(max_leverage_for_symbol("UNITREEUSDC"), 10)
 
 
 if __name__ == "__main__":

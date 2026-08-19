@@ -2,7 +2,7 @@
 
 来源：Hyperliquid `/info` meta，按 base asset 查表。`base_leverage` 和 `max_leverage` 都不得超过下表对应币种的 maxLeverage。Step 1 推断杠杆档位（保守 / 中性 / 激进 / 梭哈）后，**先按本表对应 symbol 的上限封顶，再写入参数**；超限不要静默截断，要在 Step 2 摘要中明确告知"已按上限 Nx 封顶"，让用户感知到 cap 存在。
 
-## 当前快照（58 币，2026-08-13 扩展 CRWV/NBIS）
+## 当前快照（59 币，2026-08-19 扩展 UNITREE）
 
 ### HyperCore 主板（25 个，USDC 报价）
 
@@ -14,7 +14,7 @@
 | 10x | BNB · APT · AVAX · BCH · DOGE · DOT · LINK · LTC · NEAR · SUI · TRX · UNI · ADA · ARB · **HYPE** · **ZEC** · **WLD** |
 | 5x  | ATOM · FIL · HBAR · OP |
 
-### xyz HIP-3 builder（33 个，USDC 报价；后端 normalize 自动加 `xyz:` 前缀路由）
+### xyz HIP-3 builder（34 个，USDC 报价；后端 normalize 自动加 `xyz:` 前缀路由）
 
 | maxLeverage | 币种 |
 |---|---|
@@ -22,9 +22,9 @@
 | 30x | XYZ100 |
 | 25x | GOLD · SILVER |
 | 20x | NVDA · CL · BRENTOIL · **AAPL** · **MSFT** · **TSLA** · **META** · **GOOGL** · **SPCX** · **DRAM** |
-| 10x | INTC · AMD · MU · SNDK · MSTR · CRCL · COIN · ORCL · SKHX · CBRS · **TSM** · **MRVL** · **AVGO** · **ZHIPU** · **SMSN** · **SKHY** · **CXMT** · **CRWV** · **NBIS** |
+| 10x | INTC · AMD · MU · SNDK · MSTR · CRCL · COIN · ORCL · SKHX · CBRS · **TSM** · **MRVL** · **AVGO** · **ZHIPU** · **SMSN** · **SKHY** · **CXMT** · **CRWV** · **NBIS** · **UNITREE** |
 
-> 上面两组合计 58 币种，与后端 `internal/domain/symbols.go : assetMaxLeverages` 一对一同步（2026-06-08 加入 AAPL/TSM/SPCX；2026-06-15 加入 MSFT 20x、MRVL 10x、AVGO 10x；2026-06-22 加入 ZHIPU 10x，数据源 Gate.io 永续合约 70d，取自 Hyperliquid xyz dex meta；ZHIPU 在 HL 为 onlyIsolated）。2026-06-16 校正 4 个漂移：TSLA/META/GOOGL 10x→20x、SPCX 5x→10x；2026-06-23 SPCX 10x→20x（HL 已上调，经 xyz meta 核实）。2026-06-23 加入 ZEC 10x、WLD 10x（主板 crypto）、DRAM 20x（xyz HIP-3，Roundhill Memory ETF，idx=65，onlyIsolated），均经 Hyperliquid meta 核实。
+> 上面两组合计 59 币种，与后端 `internal/domain/symbols.go : assetMaxLeverages` 一对一同步（2026-06-08 加入 AAPL/TSM/SPCX；2026-06-15 加入 MSFT 20x、MRVL 10x、AVGO 10x；2026-06-22 加入 ZHIPU 10x，数据源 Gate.io 永续合约 70d，取自 Hyperliquid xyz dex meta；ZHIPU 在 HL 为 onlyIsolated）。2026-06-16 校正 4 个漂移：TSLA/META/GOOGL 10x→20x、SPCX 5x→10x；2026-06-23 SPCX 10x→20x（HL 已上调，经 xyz meta 核实）。2026-06-23 加入 ZEC 10x、WLD 10x（主板 crypto）、DRAM 20x（xyz HIP-3，Roundhill Memory ETF，idx=65，onlyIsolated），均经 Hyperliquid meta 核实。
 
 ## 表外币种
 
@@ -46,3 +46,5 @@
 > **CXMT（长鑫存储，SSE 科创板 688825）历史：** 2026-07-15 作为 xyz **Pre-IPO 永续**上市，杠杆 5x、无外部喂价、几乎无回测数据。底层 **2026-07-27 IPO 首日交易**后合约转为标准，HL 于 **2026-08-13 把杠杆上调到 10x**（本表已更新为 10x）。现已有原生数据可回测。
 
 > **2026-08-13**：加入 CRWV 10x（CoreWeave）、NBIS 10x（Nebius），均 xyz HIP-3、52 天原生数据、经 Hyperliquid meta 核实。同日将 **CXMT 从 5x 上调到 10x** —— 其底层 2026-07-27 IPO 首日交易后，HL 把合约从 pre-IPO 转为标准并上调杠杆（漂移修正，同 SPCX 之前 10→20 的处理）。
+
+> **2026-08-19**：加入 **UNITREE 10x**（Unitree Robotics / 宇树科技），xyz HIP-3 Pre-IPO 永续、onlyIsolated、IndexInMeta=104、经 Hyperliquid meta 核实。2026-08-05 前后上市，原生 15m 仅约 14 天（1317 根），够回测但样本跨度短。同日对现有 33 个 xyz 条目做全量漂移核对：零漂移。

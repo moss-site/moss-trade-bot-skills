@@ -73,6 +73,9 @@ ASSET_MAX_LEVERAGES = {
     # 2026-08-13: CRWV (CoreWeave) + NBIS (Nebius), xyz HIP-3 equities, 10x
     "CRWV": 10,
     "NBIS": 10,
+    # 2026-08-19: UNITREE (Unitree Robotics / 宇树科技), xyz HIP-3 pre-IPO perp, 10x,
+    # onlyIsolated. Listed on HL ~2026-08-05; native 15m history only (~14d at add).
+    "UNITREE": 10,
 }
 
 

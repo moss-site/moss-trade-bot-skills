@@ -76,6 +76,9 @@ ASSET_MAX_LEVERAGES = {
     # 2026-08-19: UNITREE (Unitree Robotics / 宇树科技), xyz HIP-3 pre-IPO perp, 10x,
     # onlyIsolated. Listed on HL ~2026-08-05; native 15m history only (~14d at add).
     "UNITREE": 10,
+    # 2026-09-08: HyperCore main-board crypto perps (bare coin routing), both 3x.
+    "CASHCAT": 3,
+    "PONS": 3,
 }
 
 

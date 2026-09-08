@@ -16,7 +16,7 @@ metadata: {"openclaw": {"requires": {"bins": ["python3"]}, "emoji": "🤖"}}
 收到用户描述后**第一件事**是判断走主流币还是异动币。**按用户意图语义判断，不是字面关键词匹配**：
 
 - → **Ambush（异动币）**：用户想做的是「监听小市值币 OI 异动事件、运行时才动态选币、不预先绑定具体币种」那类策略。典型表述：抢异动 / 异动小币 / 异动信号 / 埋伏小币 / 狙击异动 / 小市值币 / ambush，**且没有指定某个具体主流币**。
-- → **主流币**：用户给了一个具体的主流币 symbol（22 个 USDC 永续或 26 个 xyz 类股票之一，如 BTC / ETH / SOL / HYPE / NVDA…）+ 回测区间 / 策略风格，想做的是**该指定币种**的择时策略。
+- → **主流币**：用户给了一个 `dataset_catalog.py` / 平台支持的具体 symbol（如 BTC / ETH / SOL / HYPE / CASHCAT / PONS / NVDA…）+ 回测区间 / 策略风格，想做的是**该指定币种**的择时策略。
 
 > ⚠️ **「异动」是币圈高频普通词，单独出现要结合语境**：当它只是形容某个主流币的行情（例：「BTC 最近异动很大，帮我做个 BTC 趋势 bot」——用户已给具体主流币 symbol + 风格），这是**主流币**意图，**不要因为句中出现「异动」二字就路由到 Ambush**。只有当「异动」指代**策略类型本身**（抓小市值币 OI 异动、不绑定某个 symbol）时才走 Ambush。判断锚点是「有没有指定具体主流币 symbol」，不是「有没有出现某个词」。
 
@@ -260,7 +260,7 @@ C) 调整参数重跑
 
 ### Ambush Step 1: 推断 (direction, aggressiveness)
 
-> 🔁 **进入前自检（防误入）**：如果用户消息里给了一个**具体主流币 symbol**（BTC / ETH / SOL / HYPE / NVDA 等 22+24 之一）并配了回测区间或择时风格，那意图其实是**主流币**——纵使句中出现「异动」这种高频普通词。此时**不要继续 Ambush**：回到主流币 Step 1-5，或反问用户「你是想做 BTC 这个具体币的择时策略，还是抓异动小币那类不绑币的策略？」。Ambush 只服务「抓小市值币 OI 异动、运行时动态选币、不绑某个 symbol」的意图。
+> 🔁 **进入前自检（防误入）**：如果用户消息里给了一个 `dataset_catalog.py` / 平台支持的**具体 symbol**（BTC / ETH / SOL / HYPE / CASHCAT / PONS / NVDA 等）并配了回测区间或择时风格，那意图其实是**主流币**——纵使句中出现「异动」这种高频普通词。此时**不要继续 Ambush**：回到主流币 Step 1-5，或反问用户「你是想做 BTC 这个具体币的择时策略，还是抓异动小币那类不绑币的策略？」。Ambush 只服务「抓小市值币 OI 异动、运行时动态选币、不绑某个 symbol」的意图。
 
 从用户描述中**直接推断**，不主动反问。模糊就用默认。只有自相矛盾（"稳健的高杠杆"）才反问一次。
 
@@ -493,7 +493,7 @@ live_runner 跑起来后：
 - ❌ 不跑 majors 的 `fetch_data.py` fingerprint（异动币是事件集合 + 阈值组合，没有"单币 + K 线时段"概念）
 - ❌ 不走主流币的 K 线 walk-forward verify 契约 — ambush 是**事件 dataset + 链式仓位回放**(Step 3.5 走的就是这条新路径,server 端按 fingerprint 对账,与主流币 verify 是**两套独立契约**)
 - ❌ 不做 `evolve`（参数创建后**完全冻结**，不进化）
-- ❌ 不接受 22 币之外的 symbol — ambush watchlist 是 server 端动态维护（小市值 OI 异常筛选），不是 skill 选的；用户不能指定"只做某个币"
+- ❌ Ambush 不接受用户指定单个 symbol — watchlist 是 server 端动态维护（小市值 OI 异常筛选），不是 skill 选的；指定平台支持币种应走主流币工作流
 - ❌ 不允许同时持仓多个 symbol — server 端 single_position_lock 强制单持仓
 
 ### Ambush 操作手册引用
@@ -502,4 +502,3 @@ live_runner 跑起来后：
 - **改参数**：unbind 旧 bot → 重跑 Step 1-5 创建新 bot；不存在 "PATCH bot params" 接口
 
 ---
-

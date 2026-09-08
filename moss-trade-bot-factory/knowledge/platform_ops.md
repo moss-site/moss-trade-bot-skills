@@ -44,7 +44,7 @@
 
 平台 verify 用 fingerprint 里的 start/end 算 actual 区间，**接受短于文件版本号天数的窗口**（上市晚的 xyz 资产、用户自定义子区间都属此类），不要按"固定 148 天"之类的旧不变量误判。
 
-- 回测 / 上传验证使用预置的 Hyperliquid 固定数据集 CSV（`scripts/data_cache/` 目录，43 币）；上传前必须以 `dataset_catalog.py` 实际发现的 `csv_path/start/end/bars` 为准，不要使用旧的固定区间记忆
+- 回测 / 上传验证使用预置的 Hyperliquid 固定数据集 CSV；上传前必须以 `dataset_catalog.py` 实际发现的 `available_symbols/csv_path/start/end/bars` 为准，不要使用旧的固定数量或区间记忆
 - 上传包中的 Bot 文案现在应显式带双语：`name_i18n/personality_i18n/description_i18n = {zh, en}`
 - 上传接口现在按请求体严格校验双语字段：缺任意一个 `*_i18n.zh/en`，即使旧单字段有值，也会直接拒绝
 - 若中文文案含中文字符，`package_upload.py` 会要求你补充自然英文版本；不要把中文原样复制到 `en`

@@ -55,6 +55,7 @@ Supports all major AI agents including **OpenClaw**, **Hermes**, **Claude Code**
 
 ## 🚀 Latest Updates:
 
+- **2026-10-19**: Updated `v1.0.28` in place with Paragon HIP-3 PAPER perpetual support, a verified 3x cap, and its native Hyperliquid 15m backtest dataset.
 - **2026-09-08**: Updated `v1.0.28` in place with HyperCore CASHCAT and PONS perpetuals, verified 3x caps, and native Hyperliquid 15m backtest datasets.
 - **2026-06-01**: Released `v1.0.28` — SKILL.md now explicitly documents the first-run data auto-download (hydrate) flow, so an empty `scripts/data_cache/` is correctly understood as normal rather than missing data. Datasets are unchanged from v1.0.27.
 - **2026-05-25**: Released lightweight `v1.0.26` Skill distribution. Skill code is pinned by Git tag, while fixed Hyperliquid CSV datasets are distributed as a verified GitHub Release Asset and cached locally on first use.

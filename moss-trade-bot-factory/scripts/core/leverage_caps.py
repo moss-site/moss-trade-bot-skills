@@ -79,12 +79,16 @@ ASSET_MAX_LEVERAGES = {
     # 2026-09-08: HyperCore main-board crypto perps (bare coin routing), both 3x.
     "CASHCAT": 3,
     "PONS": 3,
+    # 2026-10-19: Paragon HIP-3 (para:PAPER), onlyIsolated/noCross.
+    "PAPER": 3,
 }
 
 
 def normalize_perp_base_asset(symbol: str | None) -> str:
     raw = (symbol or "").upper().strip()
-    raw = raw.replace("/", "").replace("-", "").replace("_", "").replace(":", "")
+    if ":" in raw:
+        raw = raw.split(":", 1)[1]
+    raw = raw.replace("/", "").replace("-", "").replace("_", "")
     for suffix in ("USDC", "USDT", "BUSD"):
         if raw.endswith(suffix):
             raw = raw[: -len(suffix)]

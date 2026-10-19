@@ -36,19 +36,33 @@ _XYZ_BASE_ASSETS = frozenset({
     "UNITREE",
 })
 
+_HIP3_BUILDER_BY_BASE = {
+    **{base: "xyz" for base in _XYZ_BASE_ASSETS},
+    "PAPER": "para",
+}
+
 
 def normalize_coin(symbol: str) -> str:
     """Map internal symbol notation to the Hyperliquid /info coin identifier.
 
     Main-board assets return the bare base (e.g. 'BTCUSDC' -> 'BTC').
-    HIP-3 xyz builder assets return the prefixed form (e.g. 'NVDAUSDC' -> 'xyz:NVDA')
+    HIP-3 assets return their registered builder-prefixed form (for example,
+    'NVDAUSDC' -> 'xyz:NVDA' and 'PAPERUSDC' -> 'para:PAPER')
     so funding history / l2Book / candle requests hit the correct universe.
     """
     value = (symbol or "").strip().upper().replace("/", "").replace("-", "")
-    if value.endswith("USDC"):
-        value = value[:-4]
-    if value in _XYZ_BASE_ASSETS:
-        return f"xyz:{value}"
+    explicit_builder = ""
+    if ":" in value:
+        explicit_builder, value = value.split(":", 1)
+    for quote in ("USDC", "USDT", "BUSD"):
+        if value.endswith(quote):
+            value = value[: -len(quote)]
+            break
+    builder = _HIP3_BUILDER_BY_BASE.get(value)
+    if builder:
+        return f"{builder}:{value}"
+    if explicit_builder:
+        return f"{explicit_builder.lower()}:{value}"
     return value
 
 

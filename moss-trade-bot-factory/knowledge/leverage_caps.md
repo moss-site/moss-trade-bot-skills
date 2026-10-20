@@ -58,4 +58,4 @@
 
 > **2026-09-08**：加入 **CASHCAT 3x** 与 **PONS 3x**，均为 HyperCore 主板永续。固定回测数据为 100% Hyperliquid 原生 15m K 线：CASHCAT 5080 根（约 53 天），PONS 764 根（约 8 天）；PONS 样本跨度短，统计显著性有限，实际范围以 `dataset_catalog.py` 为准。
 
-> **2026-10-19**：加入 **PAPER 3x**，Paragon `para` HIP-3 永续，固定数据为 84 根 100% Hyperliquid 原生 15m K 线。上线不足 24 小时，尚未达到 Hosted 96-bar readiness，禁止补造历史或降低门槛；本地回测结果同样只代表极短样本。
+> **2026-10-19**：加入 **PAPER 3x**，Paragon `para` HIP-3 永续，固定数据快照为 84 根 100% Hyperliquid 原生 15m K 线，不代表实时历史根数上限。Hosted 的 96 根是历史策略判定的最小可评估样本数，不是创建门槛：短样本时跳过 `no_directional_signals` / `insufficient_trades`，其余参数、杠杆和执行风控仍生效。禁止补造或拼接历史；短样本回测不具有统计显著性。
